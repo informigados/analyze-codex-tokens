@@ -74,11 +74,19 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["total_tokens"], 1100)
             self.assertEqual(session["usage"]["input_tokens"], 1000)
             self.assertEqual(session["input_output_ratio"], 10.0)
-            self.assertEqual(session["cached_input_to_output_ratio"], 2.5)
-            self.assertEqual(session["cached_output_ratio"], 2.5)
+            expected_cached_input_to_output_ratio = 2.5
+            self.assertEqual(
+                session["cached_input_to_output_ratio"],
+                expected_cached_input_to_output_ratio,
+            )
+            # Backward-compatible alias for cached_input_to_output_ratio.
+            self.assertEqual(
+                session["cached_output_ratio"],
+                session["cached_input_to_output_ratio"],
+            )
             self.assertEqual(
                 self.mod.get_cached_input_to_output_ratio(session),
-                2.5,
+                expected_cached_input_to_output_ratio,
             )
             self.assertEqual(session["base_instruction_chars"], len("base rules"))
             self.assertEqual(
@@ -274,8 +282,16 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["usage"]["output_tokens"], 50)
             self.assertEqual(session["usage"]["reasoning_output_tokens"], 12)
             self.assertEqual(session["usage"]["total_tokens"], 550)
-            self.assertEqual(session["cached_input_to_output_ratio"], 2.4)
-            self.assertEqual(session["cached_output_ratio"], 2.4)
+            expected_cached_input_to_output_ratio = 2.4
+            self.assertEqual(
+                session["cached_input_to_output_ratio"],
+                expected_cached_input_to_output_ratio,
+            )
+            # Backward-compatible alias for cached_input_to_output_ratio.
+            self.assertEqual(
+                session["cached_output_ratio"],
+                session["cached_input_to_output_ratio"],
+            )
 
 
 if __name__ == "__main__":
