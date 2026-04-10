@@ -73,6 +73,8 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["project"], "my-project")
             self.assertEqual(session["total_tokens"], 1100)
             self.assertEqual(session["usage"]["input_tokens"], 1000)
+            self.assertEqual(session["input_output_ratio"], 10.0)
+            self.assertEqual(session["cached_output_ratio"], 2.5)
             self.assertEqual(session["prompt_count"], 1)
             self.assertEqual(session["turn_count"], 1)
 
@@ -130,7 +132,12 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertIn("User request:", normalized)
         self.assertIn("Files:", normalized)
         self.assertNotIn("[Doc](", normalized)
+        self.assertIn("Doc", normalized)
         self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
+
+        redacted = self.mod.redact_prompt_text("secret prompt content")
+        self.assertTrue(redacted.startswith("[redacted prompt:"))
+        self.assertIn(str(len("secret prompt content")), redacted)
 
         with patch.object(self.mod, "REDACT_PROMPTS", True):
             excerpt = self.mod.get_first_prompt_text(
