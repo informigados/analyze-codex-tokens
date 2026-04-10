@@ -1,0 +1,137 @@
+import importlib.util
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "analyze-codex-tokens.py"
+
+
+def load_module():
+    spec = importlib.util.spec_from_file_location("analyze_codex_tokens", SCRIPT_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Failed to load analyzer module")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class AnalyzeCodexTokensTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = load_module()
+
+    def test_parse_session_extracts_usage_and_prompt(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "session.jsonl"
+            lines = [
+                {
+                    "type": "session_meta",
+                    "timestamp": "2026-04-10T12:00:00Z",
+                    "payload": {
+                        "id": "sess-1",
+                        "cwd": "C:/work/my-project",
+                        "git": {"repository_url": "https://github.com/example/my-project.git"},
+                        "base_instructions": {"text": "base rules"},
+                    },
+                },
+                {
+                    "type": "turn_context",
+                    "payload": {"user_instructions": "specific instruction"},
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "total_token_usage": {
+                                "input_tokens": 1000,
+                                "cached_input_tokens": 250,
+                                "output_tokens": 100,
+                                "reasoning_output_tokens": 30,
+                                "total_tokens": 1100,
+                            }
+                        },
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "timestamp": "2026-04-10T12:01:00Z",
+                    "payload": {
+                        "type": "user_message",
+                        "message": "hello analyzer",
+                    },
+                },
+            ]
+            file_path.write_text("\n".join(json.dumps(line) for line in lines), encoding="utf-8")
+
+            session = self.mod.parse_session(file_path)
+            self.assertIsNotNone(session)
+            self.assertEqual(session["session_id"], "sess-1")
+            self.assertEqual(session["project"], "my-project")
+            self.assertEqual(session["total_tokens"], 1100)
+            self.assertEqual(session["usage"]["input_tokens"], 1000)
+            self.assertEqual(session["prompt_count"], 1)
+            self.assertEqual(session["turn_count"], 1)
+
+    def test_summarize_projects_aggregates_totals(self):
+        projects = {
+            "alpha": [
+                {
+                    "usage": {
+                        "input_tokens": 100,
+                        "cached_input_tokens": 10,
+                        "output_tokens": 20,
+                        "reasoning_output_tokens": 5,
+                        "total_tokens": 120,
+                    },
+                    "is_subagent": False,
+                    "total_tokens": 120,
+                },
+                {
+                    "usage": {
+                        "input_tokens": 200,
+                        "cached_input_tokens": 20,
+                        "output_tokens": 30,
+                        "reasoning_output_tokens": 6,
+                        "total_tokens": 230,
+                    },
+                    "is_subagent": True,
+                    "total_tokens": 230,
+                },
+            ]
+        }
+
+        summaries = self.mod.summarize_projects(projects)
+        self.assertEqual(len(summaries), 1)
+        summary = summaries[0]
+        self.assertEqual(summary["project"], "alpha")
+        self.assertEqual(summary["sessions"], 2)
+        self.assertEqual(summary["total_tokens"], 350)
+        self.assertEqual(summary["subagent_count"], 1)
+        self.assertEqual(summary["subagent_tokens"], 230)
+
+    def test_prompt_display_helpers_and_redaction(self):
+        normalized = self.mod.normalize_prompt_for_display(
+            "# Context from my IDE setup:\n\n## Open tabs:\n- README.md\n\n[Doc](https://example.com)"
+        )
+        self.assertIn("Context:", normalized)
+        self.assertIn("Open tabs:", normalized)
+        self.assertNotIn("[Doc](", normalized)
+        self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
+
+        original_redact = self.mod.REDACT_PROMPTS
+        try:
+            self.mod.REDACT_PROMPTS = True
+            excerpt = self.mod.get_first_prompt_text(
+                {"prompts": [{"text": "secret prompt content"}]},
+                limit=120,
+            )
+            self.assertTrue(excerpt.startswith("[redacted prompt:"))
+        finally:
+            self.mod.REDACT_PROMPTS = original_redact
+
+
+if __name__ == "__main__":
+    unittest.main()

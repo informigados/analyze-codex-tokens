@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+
+# Local generated artifacts
+token_report.md
+token_report.json
+prompts/
+reports/
+
+# Test/cache tooling
+.pytest_cache/

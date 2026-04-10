@@ -11,14 +11,40 @@ It groups sessions by project, reports token usage, and extracts user prompts.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
+import re
+import shutil
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+
+def parse_optional_int_env(name: str) -> int | None:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        return None
+    return value or None
+
+
+def parse_bool_env(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
 
 
 CODEX_HOME = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
@@ -26,13 +52,23 @@ SESSION_DIRS = [
     CODEX_HOME / "sessions",
     CODEX_HOME / "archived_sessions",
 ]
-OUTPUT_DIR = Path(
-    os.environ.get("OUTPUT_DIR", str(CODEX_HOME / "analysis" / "tokens"))
-).expanduser()
+OUTPUT_DIR_ENV = os.environ.get("OUTPUT_DIR")
+
+
+def default_output_dir() -> Path:
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    return Path.cwd() / "reports" / timestamp
+
+
+OUTPUT_DIR = (
+    Path(OUTPUT_DIR_ENV).expanduser() if OUTPUT_DIR_ENV else default_output_dir()
+)
 
 # Filter: only include sessions that started within the last N days (None = all time)
-SINCE_DAYS = int(os.environ.get("SINCE_DAYS", "0")) or None
+SINCE_DAYS = parse_optional_int_env("SINCE_DAYS")
 SINCE_DATE = os.environ.get("SINCE_DATE")  # e.g. "2026-03-30"
+REDACT_PROMPTS = parse_bool_env("REDACT_PROMPTS", default=False)
+WRITE_JSON = parse_bool_env("WRITE_JSON", default=True)
 
 
 def parse_iso_datetime(value: str | None) -> datetime | None:
@@ -47,10 +83,83 @@ def parse_iso_datetime(value: str | None) -> datetime | None:
 def get_cutoff() -> datetime | None:
     """Return a UTC-aware datetime cutoff, or None for all time."""
     if SINCE_DATE:
-        return datetime.fromisoformat(SINCE_DATE).replace(tzinfo=timezone.utc)
+        return datetime.strptime(SINCE_DATE, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     if SINCE_DAYS:
         return datetime.now(timezone.utc) - timedelta(days=SINCE_DAYS)
     return None
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Analyze local Codex session logs and generate usage reports."
+    )
+    parser.add_argument(
+        "--since-days",
+        type=int,
+        default=SINCE_DAYS,
+        help="Only include sessions started within the last N days.",
+    )
+    parser.add_argument(
+        "--since-date",
+        default=SINCE_DATE,
+        help="Only include sessions started on/after YYYY-MM-DD.",
+    )
+    parser.add_argument(
+        "--codex-home",
+        default=str(CODEX_HOME),
+        help="Path to Codex home directory (default: ~/.codex).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=OUTPUT_DIR_ENV,
+        help="Directory for generated reports.",
+    )
+    parser.add_argument(
+        "--redact-prompts",
+        action=argparse.BooleanOptionalAction,
+        default=REDACT_PROMPTS,
+        help="Redact prompt text in console output and generated reports.",
+    )
+    parser.add_argument(
+        "--json",
+        dest="write_json",
+        action=argparse.BooleanOptionalAction,
+        default=WRITE_JSON,
+        help="Generate token_report.json in addition to markdown report.",
+    )
+    return parser.parse_args(argv)
+
+
+def configure_runtime(args: argparse.Namespace) -> None:
+    global CODEX_HOME
+    global SESSION_DIRS
+    global OUTPUT_DIR
+    global SINCE_DAYS
+    global SINCE_DATE
+    global REDACT_PROMPTS
+    global WRITE_JSON
+
+    if args.since_days is not None and args.since_days < 0:
+        raise ValueError("--since-days must be >= 0")
+    if args.since_date:
+        try:
+            datetime.strptime(str(args.since_date), "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError("--since-date must be in YYYY-MM-DD format") from exc
+
+    CODEX_HOME = Path(args.codex_home).expanduser()
+    SESSION_DIRS = [
+        CODEX_HOME / "sessions",
+        CODEX_HOME / "archived_sessions",
+    ]
+    if args.output_dir:
+        OUTPUT_DIR = Path(args.output_dir).expanduser()
+    else:
+        OUTPUT_DIR = default_output_dir()
+    SINCE_DAYS = args.since_days
+    SINCE_DATE = args.since_date
+    REDACT_PROMPTS = bool(args.redact_prompts)
+    WRITE_JSON = bool(args.write_json)
 
 
 def format_tokens(value: int) -> str:
@@ -67,6 +176,63 @@ def format_ratio(value: float | None) -> str:
 
 def format_percent(value: float) -> str:
     return f"{value:.1f}%"
+
+
+def sanitize_text(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).replace("\r", " ").replace("\n", " ")
+    return " ".join(text.split())
+
+
+def truncate_text(value: str, limit: int) -> str:
+    if limit <= 0:
+        return ""
+    if len(value) <= limit:
+        return value
+    if limit <= 3:
+        return value[:limit]
+    return value[: limit - 3] + "..."
+
+
+def format_table_cell(value: Any, limit: int | None = None) -> str:
+    text = sanitize_text(value)
+    if limit is not None:
+        text = truncate_text(text, limit)
+    return text.replace("|", "\\|")
+
+
+def short_session_id(session_id: str | None, size: int = 8) -> str:
+    sid = sanitize_text(session_id) or "?"
+    if len(sid) <= size:
+        return sid
+    return f"{sid[:size]}..."
+
+
+def make_safe_filename(name: str, fallback: str = "unknown", limit: int = 80) -> str:
+    safe_chars = []
+    for char in name:
+        if char.isalnum() or char in ("-", "_", "."):
+            safe_chars.append(char)
+        else:
+            safe_chars.append("_")
+    safe = "".join(safe_chars).strip("._")
+    if not safe:
+        safe = fallback
+    return safe[:limit]
+
+
+def normalize_path_for_compare(value: str | None) -> str:
+    if not value:
+        return ""
+    return value.replace("\\", "/").rstrip("/").lower()
+
+
+def get_terminal_columns(default: int = 120) -> int:
+    try:
+        return shutil.get_terminal_size(fallback=(default, 24)).columns
+    except OSError:
+        return default
 
 
 def iter_session_files() -> list[Path]:
@@ -110,8 +276,9 @@ def normalize_source(source: Any) -> str:
 def classify_workspace(cwd: str | None) -> str:
     if not cwd:
         return "unknown"
-    normalized = cwd.rstrip("/")
-    worktree_marker = f"{CODEX_HOME}/worktrees/"
+    normalized = normalize_path_for_compare(cwd)
+    codex_home_normalized = normalize_path_for_compare(str(CODEX_HOME))
+    worktree_marker = f"{codex_home_normalized}/worktrees"
     if normalized.startswith(worktree_marker):
         return "codex worktree"
     return "repo root/other"
@@ -164,10 +331,32 @@ def estimate_instruction_tokens(char_count: int) -> int:
     return round(char_count / 4)
 
 
+def normalize_prompt_for_display(text: str) -> str:
+    cleaned = sanitize_text(text)
+    # Keep prompt excerpts readable in terminal and markdown tables.
+    cleaned = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 ", cleaned)
+    cleaned = cleaned.replace("# Context from my IDE setup:", "Context:")
+    cleaned = cleaned.replace("## Active file:", "Active file:")
+    cleaned = cleaned.replace("## Open tabs:", "Open tabs:")
+    cleaned = cleaned.replace("## My request for Codex:", "Request:")
+    cleaned = cleaned.replace("# Files mentioned by the user:", "Files:")
+    cleaned = cleaned.replace("## Files mentioned by the user:", "Files:")
+    cleaned = re.sub(r"(^| )#{1,6}\s+", r"\1", cleaned)
+    return " ".join(cleaned.split())
+
+
+def redact_prompt_text(text: str) -> str:
+    length = len(sanitize_text(text))
+    return f"[redacted prompt: {length} chars]"
+
+
 def get_first_prompt_text(session: dict[str, Any], limit: int = 160) -> str:
     if not session["prompts"]:
         return ""
-    return session["prompts"][0]["text"][:limit].replace("\n", " ")
+    first_prompt = session["prompts"][0]["text"]
+    if REDACT_PROMPTS:
+        return truncate_text(redact_prompt_text(first_prompt), limit)
+    return truncate_text(normalize_prompt_for_display(first_prompt), limit)
 
 
 def compute_input_output_ratio(session: dict[str, Any]) -> float | None:
@@ -186,7 +375,7 @@ def compute_cached_output_ratio(session: dict[str, Any]) -> float | None:
 
 def parse_session(jsonl_path: Path) -> dict[str, Any] | None:
     try:
-        lines = jsonl_path.read_text().splitlines()
+        lines = jsonl_path.read_text(encoding="utf-8", errors="replace").splitlines()
     except Exception:
         return None
 
@@ -405,9 +594,15 @@ def compute_descendant_subagent_stats(
     total_tokens = 0
     total_count = 0
     stack = list(children_by_parent.get(session_id, []))
+    visited: set[str] = set()
 
     while stack:
         child = stack.pop()
+        child_id = child.get("session_id")
+        if child_id in visited:
+            continue
+        if isinstance(child_id, str) and child_id:
+            visited.add(child_id)
         if child["is_subagent"]:
             total_count += 1
             total_tokens += child["total_tokens"]
@@ -529,6 +724,13 @@ def write_report(
     total_subagent_tokens = sum(s["subagent_tokens"] for s in summaries)
     total_subagent_count = sum(s["subagent_count"] for s in summaries)
     all_sessions = flatten_sessions(projects)
+    orphan_subagent_count = sum(
+        1
+        for session in all_sessions
+        if session["is_subagent"]
+        and session.get("parent_session_id")
+        and session["parent_session_id"] not in sessions_by_id
+    )
     originator_rows = build_group_breakdown(all_sessions, "originator")
     role_rows = build_group_breakdown(all_sessions, "agent_role")
     workspace_rows = build_group_breakdown(all_sessions, "workspace_kind")
@@ -548,6 +750,7 @@ def write_report(
         f"  - Output: {format_tokens(grand_output)}",
         f"  - Reasoning output: {format_tokens(grand_reasoning)}",
         f"- **Subagent sessions**: {total_subagent_count:,} ({format_tokens(total_subagent_tokens)} tokens)",
+        f"- **Subagents with missing parent in range**: {orphan_subagent_count:,}",
         "",
         "## By Project",
         "",
@@ -558,7 +761,7 @@ def write_report(
     for summary in summaries:
         usage = summary["usage"]
         lines.append(
-            f"| {summary['project']} | {summary['sessions']} "
+            f"| {format_table_cell(summary['project'])} | {summary['sessions']} "
             f"| {format_tokens(summary['total_tokens'])} "
             f"| {format_tokens(usage.get('input_tokens', 0))} "
             f"| {format_tokens(usage.get('cached_input_tokens', 0))} "
@@ -570,8 +773,9 @@ def write_report(
     lines.extend(["", "## Most Costly Sessions", ""])
 
     for index, (project_name, session) in enumerate(find_costly_sessions(projects, top_n=25), 1):
+        project_label = format_table_cell(project_name, limit=80)
         lines.append(
-            f"### {index}. {project_name} — {format_tokens(session['total_tokens'])} tokens"
+            f"### {index}. {project_label} — {format_tokens(session['total_tokens'])} tokens"
         )
         lines.append(f"- **Session**: `{session['session_id']}`")
         if session.get("timestamp_start"):
@@ -592,7 +796,7 @@ def write_report(
         )
 
         if session["prompts"]:
-            first_prompt = session["prompts"][0]["text"][:400].replace("\n", " ")
+            first_prompt = get_first_prompt_text(session, limit=400)
             lines.append("- **First prompt**:")
             lines.append(f"  > {first_prompt}")
         lines.append("")
@@ -610,11 +814,11 @@ def write_report(
         find_input_output_ratio_outliers(projects), 1
     ):
         lines.append(
-            f"| {index} | {project_name} | `{session['session_id'][:8]}...` "
+            f"| {index} | {format_table_cell(project_name, limit=80)} | `{short_session_id(session['session_id'])}` "
             f"| {format_ratio(session.get('input_output_ratio'))} "
             f"| {format_ratio(session.get('cached_output_ratio'))} "
             f"| {format_tokens(session['total_tokens'])} "
-            f"| {get_first_prompt_text(session, limit=90)} |"
+            f"| {format_table_cell(get_first_prompt_text(session, limit=90))} |"
         )
 
     lines.extend(
@@ -632,16 +836,17 @@ def write_report(
     ):
         overhead_ratio = descendant_tokens / max(session["total_tokens"], 1)
         lines.append(
-            f"| {index} | {project_name} | `{session['session_id'][:8]}...` "
+            f"| {index} | {format_table_cell(project_name, limit=80)} | `{short_session_id(session['session_id'])}` "
             f"| {descendant_count} "
             f"| {format_tokens(descendant_tokens)} "
             f"| {format_percent(overhead_ratio * 100)} "
             f"| {format_tokens(session['total_tokens'])} "
-            f"| {get_first_prompt_text(session, limit=90)} |"
+            f"| {format_table_cell(get_first_prompt_text(session, limit=90))} |"
         )
 
     lines.extend(
         [
+            "",
             "## Most Costly Subagents",
             "",
             "| # | Project | Parent Session | Subagent | Role | Total Tokens | Input | Cached Input | Output |",
@@ -651,10 +856,13 @@ def write_report(
 
     for index, (project_name, session) in enumerate(find_costly_subagents(projects, top_n=20), 1):
         usage = session["usage"]
+        parent_label = short_session_id(session.get("parent_session_id"))
+        subagent_label = format_table_cell(session.get("subagent_label") or "?", limit=48)
+        role_label = format_table_cell(session.get("agent_role") or "?", limit=48)
         lines.append(
-            f"| {index} | {project_name} | `{(session.get('parent_session_id') or '?')[:8]}...` "
-            f"| `{session.get('subagent_label') or '?'}` "
-            f"| `{session.get('agent_role') or '?'}` "
+            f"| {index} | {format_table_cell(project_name, limit=80)} | `{parent_label}` "
+            f"| {subagent_label} "
+            f"| {role_label} "
             f"| {format_tokens(session['total_tokens'])} "
             f"| {format_tokens(usage.get('input_tokens', 0))} "
             f"| {format_tokens(usage.get('cached_input_tokens', 0))} "
@@ -676,7 +884,7 @@ def write_report(
 
     project_subagent_stats.sort(key=lambda item: item[2], reverse=True)
     for project_name, count, tokens in project_subagent_stats:
-        lines.append(f"| {project_name} | {count} | {format_tokens(tokens)} |")
+        lines.append(f"| {format_table_cell(project_name)} | {count} | {format_tokens(tokens)} |")
 
     lines.extend(
         [
@@ -690,7 +898,7 @@ def write_report(
 
     for row in originator_rows:
         lines.append(
-            f"| {row['name']} | {row['sessions']} | {format_tokens(row['total_tokens'])} | {row['subagent_sessions']} |"
+            f"| {format_table_cell(row['name'])} | {row['sessions']} | {format_tokens(row['total_tokens'])} | {row['subagent_sessions']} |"
         )
 
     lines.extend(
@@ -705,7 +913,7 @@ def write_report(
 
     for row in role_rows:
         lines.append(
-            f"| {row['name']} | {row['sessions']} | {format_tokens(row['total_tokens'])} | {row['subagent_sessions']} |"
+            f"| {format_table_cell(row['name'])} | {row['sessions']} | {format_tokens(row['total_tokens'])} | {row['subagent_sessions']} |"
         )
 
     lines.extend(
@@ -720,7 +928,7 @@ def write_report(
 
     for row in workspace_rows:
         lines.append(
-            f"| {row['name']} | {row['sessions']} | {format_tokens(row['total_tokens'])} | {row['subagent_sessions']} |"
+            f"| {format_table_cell(row['name'])} | {row['sessions']} | {format_tokens(row['total_tokens'])} | {row['subagent_sessions']} |"
         )
 
     lines.extend(
@@ -737,12 +945,12 @@ def write_report(
         find_instruction_heavy_sessions(projects), 1
     ):
         lines.append(
-            f"| {index} | {project_name} | `{session['session_id'][:8]}...` "
+            f"| {index} | {format_table_cell(project_name, limit=80)} | `{short_session_id(session['session_id'])}` "
             f"| {format_tokens(session['base_instruction_chars'])} "
             f"| {format_tokens(session['max_user_instruction_chars'])} "
             f"| {format_tokens(session['instruction_chars'])} "
             f"| ~{format_tokens(session['instruction_token_estimate'])} "
-            f"| {get_first_prompt_text(session, limit=90)} |"
+            f"| {format_table_cell(get_first_prompt_text(session, limit=90))} |"
         )
 
     lines.extend(["", "## Likely Savings Opportunities", ""])
@@ -785,11 +993,159 @@ def write_report(
         )
 
     report_path.write_text("\n".join(lines) + "\n")
-    print(f"Report written: {report_path}")
     return report_path
 
 
-def write_prompts_by_project(projects: dict[str, list[dict[str, Any]]]) -> None:
+def build_json_report(
+    projects: dict[str, list[dict[str, Any]]],
+    summaries: list[dict[str, Any]],
+    children_by_parent: dict[str, list[dict[str, Any]]],
+    sessions_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    cutoff = get_cutoff()
+    all_sessions = flatten_sessions(projects)
+
+    grand_input = sum(s["usage"].get("input_tokens", 0) for s in summaries)
+    grand_cached = sum(s["usage"].get("cached_input_tokens", 0) for s in summaries)
+    grand_output = sum(s["usage"].get("output_tokens", 0) for s in summaries)
+    grand_reasoning = sum(s["usage"].get("reasoning_output_tokens", 0) for s in summaries)
+    grand_total = sum(s["total_tokens"] for s in summaries)
+    total_sessions = sum(s["sessions"] for s in summaries)
+    total_subagent_tokens = sum(s["subagent_tokens"] for s in summaries)
+    total_subagent_count = sum(s["subagent_count"] for s in summaries)
+    orphan_subagent_count = sum(
+        1
+        for session in all_sessions
+        if session["is_subagent"]
+        and session.get("parent_session_id")
+        and session["parent_session_id"] not in sessions_by_id
+    )
+
+    top_sessions = []
+    for project_name, session in find_costly_sessions(projects, top_n=25):
+        top_sessions.append(
+            {
+                "project": project_name,
+                "session_id": session["session_id"],
+                "timestamp_start": session.get("timestamp_start"),
+                "cwd": session.get("cwd"),
+                "total_tokens": session["total_tokens"],
+                "usage": session["usage"],
+                "prompt_count": session.get("prompt_count", 0),
+                "turn_count": session.get("turn_count", 0),
+                "input_output_ratio": session.get("input_output_ratio"),
+                "cached_output_ratio": session.get("cached_output_ratio"),
+                "first_prompt": get_first_prompt_text(session, limit=240),
+            }
+        )
+
+    top_subagents = []
+    for project_name, session in find_costly_subagents(projects, top_n=25):
+        top_subagents.append(
+            {
+                "project": project_name,
+                "session_id": session["session_id"],
+                "parent_session_id": session.get("parent_session_id"),
+                "subagent_label": session.get("subagent_label"),
+                "agent_role": session.get("agent_role"),
+                "total_tokens": session["total_tokens"],
+                "usage": session["usage"],
+            }
+        )
+
+    input_output_outliers = []
+    for project_name, session in find_input_output_ratio_outliers(projects, top_n=25):
+        input_output_outliers.append(
+            {
+                "project": project_name,
+                "session_id": session["session_id"],
+                "input_output_ratio": session.get("input_output_ratio"),
+                "cached_output_ratio": session.get("cached_output_ratio"),
+                "total_tokens": session["total_tokens"],
+                "first_prompt": get_first_prompt_text(session, limit=200),
+            }
+        )
+
+    subagent_overhead = []
+    for project_name, session, descendant_count, descendant_tokens in find_subagent_overhead_outliers(
+        projects, children_by_parent, top_n=25
+    ):
+        parent_total = max(session["total_tokens"], 1)
+        subagent_overhead.append(
+            {
+                "project": project_name,
+                "parent_session_id": session["session_id"],
+                "descendant_subagents": descendant_count,
+                "descendant_tokens": descendant_tokens,
+                "overhead_vs_parent_percent": round((descendant_tokens / parent_total) * 100, 2),
+                "parent_tokens": session["total_tokens"],
+                "first_prompt": get_first_prompt_text(session, limit=200),
+            }
+        )
+
+    instruction_heavy = []
+    for project_name, session in find_instruction_heavy_sessions(projects, top_n=25):
+        instruction_heavy.append(
+            {
+                "project": project_name,
+                "session_id": session["session_id"],
+                "base_instruction_chars": session["base_instruction_chars"],
+                "max_user_instruction_chars": session["max_user_instruction_chars"],
+                "instruction_chars": session["instruction_chars"],
+                "instruction_token_estimate": session["instruction_token_estimate"],
+                "first_prompt": get_first_prompt_text(session, limit=200),
+            }
+        )
+
+    return {
+        "metadata": {
+            "generated_at": datetime.now().isoformat(),
+            "range": f"since {cutoff.date().isoformat()}" if cutoff else "all_time",
+            "filters": {
+                "since_days": SINCE_DAYS,
+                "since_date": SINCE_DATE,
+                "redact_prompts": REDACT_PROMPTS,
+            },
+            "paths": {
+                "codex_home": str(CODEX_HOME),
+                "output_dir": str(OUTPUT_DIR),
+                "session_dirs": [str(p) for p in SESSION_DIRS],
+            },
+        },
+        "totals": {
+            "projects": len(summaries),
+            "sessions": total_sessions,
+            "total_tokens": grand_total,
+            "input_tokens": grand_input,
+            "cached_input_tokens": grand_cached,
+            "output_tokens": grand_output,
+            "reasoning_output_tokens": grand_reasoning,
+            "subagent_sessions": total_subagent_count,
+            "subagent_tokens": total_subagent_tokens,
+            "subagents_with_missing_parent_in_range": orphan_subagent_count,
+        },
+        "project_summaries": summaries,
+        "breakdowns": {
+            "originator": build_group_breakdown(all_sessions, "originator"),
+            "agent_role": build_group_breakdown(all_sessions, "agent_role"),
+            "workspace_kind": build_group_breakdown(all_sessions, "workspace_kind"),
+        },
+        "top_costly_sessions": top_sessions,
+        "top_costly_subagents": top_subagents,
+        "input_output_ratio_outliers": input_output_outliers,
+        "subagent_overhead_hotspots": subagent_overhead,
+        "instruction_heavy_sessions": instruction_heavy,
+    }
+
+
+def write_json_report(report_data: dict[str, Any]) -> Path:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    json_path = OUTPUT_DIR / "token_report.json"
+    json_path.write_text(json.dumps(report_data, ensure_ascii=False, indent=2) + "\n")
+    return json_path
+
+
+def write_prompts_by_project(projects: dict[str, list[dict[str, Any]]]) -> Path:
     prompts_dir = OUTPUT_DIR / "prompts"
     prompts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -811,7 +1167,7 @@ def write_prompts_by_project(projects: dict[str, list[dict[str, Any]]]) -> None:
             continue
 
         all_prompts.sort(key=lambda item: item["timestamp"] or "")
-        safe_name = project_name.replace("/", "_").replace(" ", "_")[:80]
+        safe_name = make_safe_filename(project_name)
         out_path = prompts_dir / f"{safe_name}.md"
 
         lines = [
@@ -825,12 +1181,15 @@ def write_prompts_by_project(projects: dict[str, list[dict[str, Any]]]) -> None:
             timestamp = prompt["timestamp"][:19].replace("T", " ") if prompt["timestamp"] else "unknown"
             lines.append(f"## {index}. [{timestamp}] Session `{prompt['session_id'][:8]}`")
             lines.append("")
-            lines.append(prompt["text"])
+            if REDACT_PROMPTS:
+                lines.append(redact_prompt_text(prompt["text"]))
+            else:
+                lines.append(prompt["text"])
             lines.append("")
 
         out_path.write_text("\n".join(lines))
 
-    print(f"Prompt files written to: {prompts_dir}")
+    return prompts_dir
 
 
 def print_summary(
@@ -838,33 +1197,49 @@ def print_summary(
 ) -> None:
     grand_total = sum(summary["total_tokens"] for summary in summaries)
     total_sessions = sum(summary["sessions"] for summary in summaries)
+    terminal_columns = get_terminal_columns()
+    max_project_name = max(
+        (len(sanitize_text(summary["project"])) for summary in summaries), default=32
+    )
+    max_project_width_for_terminal = max(24, terminal_columns - 35)
+    project_width = max(24, min(52, max_project_name, max_project_width_for_terminal))
 
     print(
         f"\nTotal: {format_tokens(grand_total)} tokens across {total_sessions} sessions "
         f"in {len(summaries)} projects\n"
     )
-    print(f"{'Project':<32} {'Sessions':>8} {'Total Tokens':>14} {'Subagents':>10}")
-    print("-" * 70)
+    print(f"{'Project':<{project_width}} {'Sessions':>8} {'Total Tokens':>14} {'Subagents':>10}")
+    print("-" * (project_width + 35))
 
     for summary in summaries[:30]:
+        project_label = truncate_text(sanitize_text(summary["project"]), project_width)
         print(
-            f"{summary['project']:<32} {summary['sessions']:>8,} "
+            f"{project_label:<{project_width}} {summary['sessions']:>8,} "
             f"{format_tokens(summary['total_tokens']):>14} {summary['subagent_count']:>10,}"
         )
 
     print("\nTop 10 costliest sessions:")
     for project_name, session in find_costly_sessions(projects, top_n=10):
         started = session["timestamp_start"][:10] if session["timestamp_start"] else "?"
-        first_prompt = ""
+        first_prompt = "no prompt captured"
         if session["prompts"]:
-            first_prompt = session["prompts"][0]["text"][:80].replace("\n", " ")
+            first_prompt = get_first_prompt_text(session, limit=max(50, terminal_columns - 12))
+        prompt_width = max(50, terminal_columns - 12)
         print(
-            f"  [{started}] {project_name}: {format_tokens(session['total_tokens'])} "
-            f"— {first_prompt}"
+            f"  [{started}] {project_name}: {format_tokens(session['total_tokens'])}"
         )
+        print(f"      {truncate_text(first_prompt, prompt_width)}")
+        print("")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    try:
+        args = parse_args(argv)
+        configure_runtime(args)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
     print("Scanning Codex sessions...")
     projects, children_by_parent, sessions_by_id = analyze_all()
     summaries = summarize_projects(projects)
@@ -873,12 +1248,18 @@ def main() -> int:
     print_summary(summaries, projects)
 
     report_path = write_report(projects, summaries, children_by_parent, sessions_by_id)
-    write_prompts_by_project(projects)
+    json_path = None
+    if WRITE_JSON:
+        report_data = build_json_report(projects, summaries, children_by_parent, sessions_by_id)
+        json_path = write_json_report(report_data)
+    prompts_dir = write_prompts_by_project(projects)
 
     print(f"\nFull report: {report_path}")
-    print(f"Prompts: {OUTPUT_DIR / 'prompts'}")
+    if json_path:
+        print(f"JSON report: {json_path}")
+    print(f"Prompts: {prompts_dir}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
