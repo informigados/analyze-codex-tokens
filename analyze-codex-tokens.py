@@ -47,22 +47,393 @@ def parse_bool_env(name: str, default: bool = False) -> bool:
     return default
 
 
+def normalize_lang_code(value: str | None) -> str:
+    if not value:
+        return "en"
+    normalized = value.strip().lower().replace("_", "-")
+    aliases = {
+        "en": "en",
+        "en-us": "en",
+        "en-gb": "en",
+        "english": "en",
+        "pt": "pt-br",
+        "pt-br": "pt-br",
+        "ptbr": "pt-br",
+        "pt-pt": "pt-pt",
+        "ptpt": "pt-pt",
+        "es": "es",
+        "es-es": "es",
+        "spanish": "es",
+    }
+    return aliases.get(normalized, "en")
+
+
+TRANSLATIONS = {
+    "en": {
+        "app_description": "Analyze local Codex session logs and generate usage reports.",
+        "error_prefix": "Error",
+        "table_project": "Project",
+        "table_sessions": "Sessions",
+        "table_total_tokens": "Total Tokens",
+        "table_subagents": "Subagents",
+        "col_session": "Session",
+        "col_first_prompt": "First Prompt",
+        "col_total": "Total",
+        "col_input": "Input",
+        "col_cached_input": "Cached Input",
+        "col_output": "Output",
+        "col_reasoning": "Reasoning",
+        "col_parent_session": "Parent Session",
+        "col_descendant_subagents": "Descendant Subagents",
+        "col_descendant_tokens": "Descendant Tokens",
+        "col_overhead_vs_parent": "Overhead vs Parent",
+        "col_parent_tokens": "Parent Tokens",
+        "col_subagent": "Subagent",
+        "col_role": "Role",
+        "col_subagent_sessions": "Subagent Sessions",
+        "col_subagent_tokens": "Subagent Tokens",
+        "col_originator": "Originator",
+        "col_agent_role": "Agent Role",
+        "col_workspace_kind": "Workspace Kind",
+        "col_base_instr_chars": "Base Instr Chars",
+        "col_max_turn_instr_chars": "Max Turn Instr Chars",
+        "col_combined_chars": "Combined Chars",
+        "col_est_tokens": "Est. Tokens",
+        "date_range_since": "Since {date}",
+        "date_range_all_time": "All time",
+        "report_title": "# Codex Token Usage Analysis",
+        "report_generated": "Generated: {now} | Range: {date_range}",
+        "report_grand_totals": "## Grand Totals",
+        "report_projects": "- **Projects**: {count}",
+        "report_sessions": "- **Sessions**: {count}",
+        "report_total_tokens": "- **Total tokens**: {value}",
+        "report_input": "  - Input: {value}",
+        "report_cached_input": "  - Cached input: {value}",
+        "report_output": "  - Output: {value}",
+        "report_reasoning_output": "  - Reasoning output: {value}",
+        "report_subagent_sessions": "- **Subagent sessions**: {count} ({tokens} tokens)",
+        "report_subagents_missing_parent": "- **Subagents with missing parent in range**: {count}",
+        "report_by_project": "## By Project",
+        "report_most_costly_sessions": "## Most Costly Sessions",
+        "report_session_title": "### {index}. {project} - {tokens} tokens",
+        "report_session_label": "- **Session**: `{session_id}`",
+        "report_started_label": "- **Started**: {value}",
+        "report_cwd_label": "- **CWD**: `{value}`",
+        "report_direct_subagents_label": "- **Direct subagents**: {count}",
+        "report_tokens_label": "- **Tokens**: input={input}, cached_input={cached_input}, output={output}, reasoning={reasoning}",
+        "report_first_prompt_label": "- **First prompt**:",
+        "report_highest_ratios": "## Highest Input/Output Ratios",
+        "report_subagent_overhead_hotspots": "## Subagent Overhead Hotspots",
+        "report_most_costly_subagents": "## Most Costly Subagents",
+        "report_subagent_usage_by_project": "## Subagent Usage By Project",
+        "report_usage_by_originator": "## Usage By Originator",
+        "report_usage_by_agent_role": "## Usage By Agent Role",
+        "report_usage_by_workspace_kind": "## Usage By Workspace Kind",
+        "report_instruction_heavy": "## Most Instruction-Heavy Sessions",
+        "report_likely_savings": "## Likely Savings Opportunities",
+        "insight_subagent_cost": "- Subagent usage is a major cost center: {subagent_tokens} of {grand_total} total tokens ({share}) are in subagent sessions.",
+        "insight_context_replay": "- Context replay dominates output: input/output is {input_output_ratio} and cached-input/output is {cached_output_ratio} across the whole report window.",
+        "insight_top_sessions_share": "- A small number of sessions dominate spend: the top 5 non-subagent sessions account for {tokens} tokens ({share} of total usage).",
+        "insight_hotspot": "- The largest subagent hotspot is `{session_id}` in {project}: {descendant_count} descendant subagents consumed {descendant_tokens} tokens, equal to {overhead_ratio} of the parent session's own token count.",
+        "insight_instruction_heavy": "- The heaviest static instruction payload observed was in `{session_id}` ({project}) at {instruction_chars} characters, or about ~{instruction_tokens} tokens before any repo/file context was added.",
+        "prompts_title": "# Prompts: {project}",
+        "prompts_summary": "{prompt_count} prompts across {session_count} sessions",
+        "prompts_session_item": "## {index}. [{timestamp}] Session `{session_id}`",
+        "unknown": "unknown",
+        "console_scanning": "Scanning Codex sessions...",
+        "console_found_projects": "Found {count} projects",
+        "console_total_summary": "Total: {tokens} tokens across {sessions} sessions in {projects} projects",
+        "console_top_10": "Top 10 costliest sessions:",
+        "console_no_prompt": "no prompt captured",
+        "console_full_report": "Full report: {path}",
+        "console_json_report": "JSON report: {path}",
+        "console_prompts": "Prompts: {path}",
+    },
+    "pt-br": {
+        "app_description": "Analisa logs locais de sessões do Codex e gera relatórios de uso.",
+        "error_prefix": "Erro",
+        "table_project": "Projeto",
+        "table_sessions": "Sessões",
+        "table_total_tokens": "Tokens Totais",
+        "table_subagents": "Subagentes",
+        "col_session": "Sessão",
+        "col_first_prompt": "Primeiro Prompt",
+        "col_total": "Total",
+        "col_input": "Entrada",
+        "col_cached_input": "Entrada em Cache",
+        "col_output": "Saída",
+        "col_reasoning": "Raciocínio",
+        "col_parent_session": "Sessão Pai",
+        "col_descendant_subagents": "Subagentes Descendentes",
+        "col_descendant_tokens": "Tokens Descendentes",
+        "col_overhead_vs_parent": "Overhead vs Pai",
+        "col_parent_tokens": "Tokens da Sessão Pai",
+        "col_subagent": "Subagente",
+        "col_role": "Função",
+        "col_subagent_sessions": "Sessões de Subagente",
+        "col_subagent_tokens": "Tokens de Subagente",
+        "col_originator": "Originador",
+        "col_agent_role": "Função do Agente",
+        "col_workspace_kind": "Tipo de Workspace",
+        "col_base_instr_chars": "Chars de Instr. Base",
+        "col_max_turn_instr_chars": "Máx. Chars de Instr. por Turno",
+        "col_combined_chars": "Chars Combinados",
+        "col_est_tokens": "Tokens Est.",
+        "date_range_since": "Desde {date}",
+        "date_range_all_time": "Todo o período",
+        "report_title": "# Análise de Uso de Tokens do Codex",
+        "report_generated": "Gerado em: {now} | Período: {date_range}",
+        "report_grand_totals": "## Totais Gerais",
+        "report_projects": "- **Projetos**: {count}",
+        "report_sessions": "- **Sessões**: {count}",
+        "report_total_tokens": "- **Total de tokens**: {value}",
+        "report_input": "  - Entrada: {value}",
+        "report_cached_input": "  - Entrada em cache: {value}",
+        "report_output": "  - Saída: {value}",
+        "report_reasoning_output": "  - Saída de raciocínio: {value}",
+        "report_subagent_sessions": "- **Sessões de subagente**: {count} ({tokens} tokens)",
+        "report_subagents_missing_parent": "- **Subagentes com sessão-pai fora do período**: {count}",
+        "report_by_project": "## Por Projeto",
+        "report_most_costly_sessions": "## Sessões Mais Caras",
+        "report_session_title": "### {index}. {project} - {tokens} tokens",
+        "report_session_label": "- **Sessão**: `{session_id}`",
+        "report_started_label": "- **Iniciada**: {value}",
+        "report_cwd_label": "- **CWD**: `{value}`",
+        "report_direct_subagents_label": "- **Subagentes diretos**: {count}",
+        "report_tokens_label": "- **Tokens**: entrada={input}, entrada_em_cache={cached_input}, saída={output}, raciocínio={reasoning}",
+        "report_first_prompt_label": "- **Primeiro prompt**:",
+        "report_highest_ratios": "## Maiores Razões Entrada/Saída",
+        "report_subagent_overhead_hotspots": "## Pontos Críticos de Overhead de Subagentes",
+        "report_most_costly_subagents": "## Subagentes Mais Caros",
+        "report_subagent_usage_by_project": "## Uso de Subagentes por Projeto",
+        "report_usage_by_originator": "## Uso por Originador",
+        "report_usage_by_agent_role": "## Uso por Função de Agente",
+        "report_usage_by_workspace_kind": "## Uso por Tipo de Workspace",
+        "report_instruction_heavy": "## Sessões com Maior Carga de Instruções",
+        "report_likely_savings": "## Oportunidades de Economia",
+        "insight_subagent_cost": "- O uso de subagentes é um grande centro de custo: {subagent_tokens} de {grand_total} tokens totais ({share}) estão em sessões de subagente.",
+        "insight_context_replay": "- A repetição de contexto domina a saída: entrada/saída = {input_output_ratio} e cache/saída = {cached_output_ratio} em todo o período analisado.",
+        "insight_top_sessions_share": "- Um pequeno número de sessões concentra o gasto: as 5 maiores sessões não subagente somam {tokens} tokens ({share} do uso total).",
+        "insight_hotspot": "- O maior hotspot de subagente é `{session_id}` em {project}: {descendant_count} subagentes descendentes consumiram {descendant_tokens} tokens, equivalente a {overhead_ratio} do total da sessão pai.",
+        "insight_instruction_heavy": "- A maior carga estática de instruções foi observada em `{session_id}` ({project}), com {instruction_chars} caracteres, cerca de ~{instruction_tokens} tokens antes de adicionar contexto de repositório/arquivos.",
+        "prompts_title": "# Prompts: {project}",
+        "prompts_summary": "{prompt_count} prompts em {session_count} sessões",
+        "prompts_session_item": "## {index}. [{timestamp}] Sessão `{session_id}`",
+        "unknown": "desconhecido",
+        "console_scanning": "Analisando sessões do Codex...",
+        "console_found_projects": "Encontrados {count} projetos",
+        "console_total_summary": "Total: {tokens} tokens em {sessions} sessões de {projects} projetos",
+        "console_top_10": "Top 10 sessões mais caras:",
+        "console_no_prompt": "nenhum prompt capturado",
+        "console_full_report": "Relatório completo: {path}",
+        "console_json_report": "Relatório JSON: {path}",
+        "console_prompts": "Prompts: {path}",
+    },
+    "pt-pt": {
+        "app_description": "Analisa registos locais de sessões do Codex e gera relatórios de utilização.",
+        "error_prefix": "Erro",
+        "table_project": "Projeto",
+        "table_sessions": "Sessões",
+        "table_total_tokens": "Tokens Totais",
+        "table_subagents": "Subagentes",
+        "col_session": "Sessão",
+        "col_first_prompt": "Primeiro Prompt",
+        "col_total": "Total",
+        "col_input": "Entrada",
+        "col_cached_input": "Entrada em Cache",
+        "col_output": "Saída",
+        "col_reasoning": "Raciocínio",
+        "col_parent_session": "Sessão Pai",
+        "col_descendant_subagents": "Subagentes Descendentes",
+        "col_descendant_tokens": "Tokens Descendentes",
+        "col_overhead_vs_parent": "Overhead vs Pai",
+        "col_parent_tokens": "Tokens da Sessão Pai",
+        "col_subagent": "Subagente",
+        "col_role": "Função",
+        "col_subagent_sessions": "Sessões de Subagente",
+        "col_subagent_tokens": "Tokens de Subagente",
+        "col_originator": "Originador",
+        "col_agent_role": "Função do Agente",
+        "col_workspace_kind": "Tipo de Workspace",
+        "col_base_instr_chars": "Chars de Instr. Base",
+        "col_max_turn_instr_chars": "Máx. Chars de Instr. por Turno",
+        "col_combined_chars": "Chars Combinados",
+        "col_est_tokens": "Tokens Est.",
+        "date_range_since": "Desde {date}",
+        "date_range_all_time": "Todo o período",
+        "report_title": "# Análise de Utilização de Tokens do Codex",
+        "report_generated": "Gerado em: {now} | Período: {date_range}",
+        "report_grand_totals": "## Totais Gerais",
+        "report_projects": "- **Projetos**: {count}",
+        "report_sessions": "- **Sessões**: {count}",
+        "report_total_tokens": "- **Total de tokens**: {value}",
+        "report_input": "  - Entrada: {value}",
+        "report_cached_input": "  - Entrada em cache: {value}",
+        "report_output": "  - Saída: {value}",
+        "report_reasoning_output": "  - Saída de raciocínio: {value}",
+        "report_subagent_sessions": "- **Sessões de subagente**: {count} ({tokens} tokens)",
+        "report_subagents_missing_parent": "- **Subagentes com sessão-pai fora do período**: {count}",
+        "report_by_project": "## Por Projeto",
+        "report_most_costly_sessions": "## Sessões Mais Dispendiosas",
+        "report_session_title": "### {index}. {project} - {tokens} tokens",
+        "report_session_label": "- **Sessão**: `{session_id}`",
+        "report_started_label": "- **Iniciada**: {value}",
+        "report_cwd_label": "- **CWD**: `{value}`",
+        "report_direct_subagents_label": "- **Subagentes diretos**: {count}",
+        "report_tokens_label": "- **Tokens**: entrada={input}, entrada_em_cache={cached_input}, saída={output}, raciocínio={reasoning}",
+        "report_first_prompt_label": "- **Primeiro prompt**:",
+        "report_highest_ratios": "## Maiores Rácios Entrada/Saída",
+        "report_subagent_overhead_hotspots": "## Pontos Críticos de Overhead de Subagentes",
+        "report_most_costly_subagents": "## Subagentes Mais Dispendiosos",
+        "report_subagent_usage_by_project": "## Uso de Subagentes por Projeto",
+        "report_usage_by_originator": "## Uso por Originador",
+        "report_usage_by_agent_role": "## Uso por Função de Agente",
+        "report_usage_by_workspace_kind": "## Uso por Tipo de Workspace",
+        "report_instruction_heavy": "## Sessões com Maior Carga de Instruções",
+        "report_likely_savings": "## Oportunidades de Poupança",
+        "insight_subagent_cost": "- O uso de subagentes é um grande centro de custo: {subagent_tokens} de {grand_total} tokens totais ({share}) estão em sessões de subagente.",
+        "insight_context_replay": "- A repetição de contexto domina a saída: entrada/saída = {input_output_ratio} e cache/saída = {cached_output_ratio} em todo o período analisado.",
+        "insight_top_sessions_share": "- Um pequeno número de sessões concentra o custo: as 5 maiores sessões não subagente totalizam {tokens} tokens ({share} do uso total).",
+        "insight_hotspot": "- O maior hotspot de subagente é `{session_id}` em {project}: {descendant_count} subagentes descendentes consumiram {descendant_tokens} tokens, equivalente a {overhead_ratio} do total da sessão pai.",
+        "insight_instruction_heavy": "- A maior carga estática de instruções foi observada em `{session_id}` ({project}), com {instruction_chars} caracteres, cerca de ~{instruction_tokens} tokens antes de adicionar contexto de repositório/ficheiros.",
+        "prompts_title": "# Prompts: {project}",
+        "prompts_summary": "{prompt_count} prompts em {session_count} sessões",
+        "prompts_session_item": "## {index}. [{timestamp}] Sessão `{session_id}`",
+        "unknown": "desconhecido",
+        "console_scanning": "A analisar sessões do Codex...",
+        "console_found_projects": "Encontrados {count} projetos",
+        "console_total_summary": "Total: {tokens} tokens em {sessions} sessões de {projects} projetos",
+        "console_top_10": "Top 10 sessões mais dispendiosas:",
+        "console_no_prompt": "nenhum prompt capturado",
+        "console_full_report": "Relatório completo: {path}",
+        "console_json_report": "Relatório JSON: {path}",
+        "console_prompts": "Prompts: {path}",
+    },
+    "es": {
+        "app_description": "Analiza registros locales de sesiones de Codex y genera informes de uso.",
+        "error_prefix": "Error",
+        "table_project": "Proyecto",
+        "table_sessions": "Sesiones",
+        "table_total_tokens": "Tokens Totales",
+        "table_subagents": "Subagentes",
+        "col_session": "Sesión",
+        "col_first_prompt": "Primer Prompt",
+        "col_total": "Total",
+        "col_input": "Entrada",
+        "col_cached_input": "Entrada en Caché",
+        "col_output": "Salida",
+        "col_reasoning": "Razonamiento",
+        "col_parent_session": "Sesión Padre",
+        "col_descendant_subagents": "Subagentes Descendientes",
+        "col_descendant_tokens": "Tokens Descendientes",
+        "col_overhead_vs_parent": "Sobrecarga vs Padre",
+        "col_parent_tokens": "Tokens de la Sesión Padre",
+        "col_subagent": "Subagente",
+        "col_role": "Rol",
+        "col_subagent_sessions": "Sesiones de Subagente",
+        "col_subagent_tokens": "Tokens de Subagente",
+        "col_originator": "Originador",
+        "col_agent_role": "Rol del Agente",
+        "col_workspace_kind": "Tipo de Workspace",
+        "col_base_instr_chars": "Chars de Instr. Base",
+        "col_max_turn_instr_chars": "Máx. Chars de Instr. por Turno",
+        "col_combined_chars": "Chars Combinados",
+        "col_est_tokens": "Tokens Est.",
+        "date_range_since": "Desde {date}",
+        "date_range_all_time": "Todo el período",
+        "report_title": "# Análisis de Uso de Tokens de Codex",
+        "report_generated": "Generado: {now} | Rango: {date_range}",
+        "report_grand_totals": "## Totales Generales",
+        "report_projects": "- **Proyectos**: {count}",
+        "report_sessions": "- **Sesiones**: {count}",
+        "report_total_tokens": "- **Total de tokens**: {value}",
+        "report_input": "  - Entrada: {value}",
+        "report_cached_input": "  - Entrada en caché: {value}",
+        "report_output": "  - Salida: {value}",
+        "report_reasoning_output": "  - Salida de razonamiento: {value}",
+        "report_subagent_sessions": "- **Sesiones de subagente**: {count} ({tokens} tokens)",
+        "report_subagents_missing_parent": "- **Subagentes con sesión padre fuera del rango**: {count}",
+        "report_by_project": "## Por Proyecto",
+        "report_most_costly_sessions": "## Sesiones Más Costosas",
+        "report_session_title": "### {index}. {project} - {tokens} tokens",
+        "report_session_label": "- **Sesión**: `{session_id}`",
+        "report_started_label": "- **Inicio**: {value}",
+        "report_cwd_label": "- **CWD**: `{value}`",
+        "report_direct_subagents_label": "- **Subagentes directos**: {count}",
+        "report_tokens_label": "- **Tokens**: entrada={input}, entrada_en_caché={cached_input}, salida={output}, razonamiento={reasoning}",
+        "report_first_prompt_label": "- **Primer prompt**:",
+        "report_highest_ratios": "## Mayores Ratios Entrada/Salida",
+        "report_subagent_overhead_hotspots": "## Puntos Críticos de Sobrecarga de Subagentes",
+        "report_most_costly_subagents": "## Subagentes Más Costosos",
+        "report_subagent_usage_by_project": "## Uso de Subagentes por Proyecto",
+        "report_usage_by_originator": "## Uso por Originador",
+        "report_usage_by_agent_role": "## Uso por Rol de Agente",
+        "report_usage_by_workspace_kind": "## Uso por Tipo de Workspace",
+        "report_instruction_heavy": "## Sesiones con Mayor Carga de Instrucciones",
+        "report_likely_savings": "## Oportunidades Probables de Ahorro",
+        "insight_subagent_cost": "- El uso de subagentes es un gran centro de coste: {subagent_tokens} de {grand_total} tokens totales ({share}) están en sesiones de subagente.",
+        "insight_context_replay": "- La repetición de contexto domina la salida: entrada/salida = {input_output_ratio} y caché/salida = {cached_output_ratio} en todo el período analizado.",
+        "insight_top_sessions_share": "- Un pequeño número de sesiones concentra el gasto: las 5 mayores sesiones no subagente suman {tokens} tokens ({share} del uso total).",
+        "insight_hotspot": "- El mayor hotspot de subagente es `{session_id}` en {project}: {descendant_count} subagentes descendientes consumieron {descendant_tokens} tokens, equivalente a {overhead_ratio} del total de la sesión padre.",
+        "insight_instruction_heavy": "- La mayor carga estática de instrucciones se observó en `{session_id}` ({project}), con {instruction_chars} caracteres, cerca de ~{instruction_tokens} tokens antes de añadir contexto de repositorio/archivos.",
+        "prompts_title": "# Prompts: {project}",
+        "prompts_summary": "{prompt_count} prompts en {session_count} sesiones",
+        "prompts_session_item": "## {index}. [{timestamp}] Sesión `{session_id}`",
+        "unknown": "desconocido",
+        "console_scanning": "Escaneando sesiones de Codex...",
+        "console_found_projects": "Se encontraron {count} proyectos",
+        "console_total_summary": "Total: {tokens} tokens en {sessions} sesiones de {projects} proyectos",
+        "console_top_10": "Top 10 sesiones más costosas:",
+        "console_no_prompt": "no se capturó ningún prompt",
+        "console_full_report": "Reporte completo: {path}",
+        "console_json_report": "Reporte JSON: {path}",
+        "console_prompts": "Prompts: {path}",
+    },
+}
+
+
+def tr(key: str, **kwargs: Any) -> str:
+    lang_map = TRANSLATIONS.get(REPORT_LANG, TRANSLATIONS["en"])
+    template = lang_map.get(key, TRANSLATIONS["en"].get(key, key))
+    return template.format(**kwargs)
+
+
 CODEX_HOME = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
 SESSION_DIRS = [
     CODEX_HOME / "sessions",
     CODEX_HOME / "archived_sessions",
 ]
 OUTPUT_DIR_ENV = os.environ.get("OUTPUT_DIR")
+REPORT_LANG = normalize_lang_code(os.environ.get("REPORT_LANG"))
 
 
-def default_output_dir() -> Path:
+def build_run_folder_name(lang_code: str | None = None) -> str:
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    return Path.cwd() / "reports" / timestamp
+    normalized_lang = normalize_lang_code(lang_code)
+    return f"{normalized_lang}-{timestamp}"
 
 
-OUTPUT_DIR = (
-    Path(OUTPUT_DIR_ENV).expanduser() if OUTPUT_DIR_ENV else default_output_dir()
-)
+def default_output_dir(lang_code: str | None = None) -> Path:
+    return Path.cwd() / "reports" / build_run_folder_name(lang_code)
+
+
+def resolve_output_dir(raw_output_dir: str | None, lang_code: str) -> Path:
+    if not raw_output_dir:
+        return default_output_dir(lang_code)
+
+    output_dir = Path(raw_output_dir).expanduser()
+    folder_name = output_dir.name.strip().lower().replace("_", "-")
+    parent_name = output_dir.parent.name.strip().lower().replace("_", "-")
+    normalized_lang = normalize_lang_code(lang_code)
+
+    if folder_name == "reports":
+        return output_dir / build_run_folder_name(normalized_lang)
+    if folder_name == normalized_lang and parent_name == "reports":
+        return output_dir.parent / build_run_folder_name(normalized_lang)
+    return output_dir
+
+
+OUTPUT_DIR = resolve_output_dir(OUTPUT_DIR_ENV, REPORT_LANG)
 
 # Filter: only include sessions that started within the last N days (None = all time)
 SINCE_DAYS = parse_optional_int_env("SINCE_DAYS")
@@ -89,9 +460,15 @@ def get_cutoff() -> datetime | None:
     return None
 
 
+def format_date_range(cutoff: datetime | None) -> str:
+    if cutoff:
+        return tr("date_range_since", date=cutoff.strftime("%Y-%m-%d"))
+    return tr("date_range_all_time")
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Analyze local Codex session logs and generate usage reports."
+        description=tr("app_description")
     )
     parser.add_argument(
         "--since-days",
@@ -127,6 +504,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=WRITE_JSON,
         help="Generate token_report.json in addition to markdown report.",
     )
+    parser.add_argument(
+        "--lang",
+        default=REPORT_LANG,
+        help="Report/console language: en, pt-br, pt-pt, es.",
+    )
     return parser.parse_args(argv)
 
 
@@ -138,6 +520,7 @@ def configure_runtime(args: argparse.Namespace) -> None:
     global SINCE_DATE
     global REDACT_PROMPTS
     global WRITE_JSON
+    global REPORT_LANG
 
     if args.since_days is not None and args.since_days < 0:
         raise ValueError("--since-days must be >= 0")
@@ -152,10 +535,8 @@ def configure_runtime(args: argparse.Namespace) -> None:
         CODEX_HOME / "sessions",
         CODEX_HOME / "archived_sessions",
     ]
-    if args.output_dir:
-        OUTPUT_DIR = Path(args.output_dir).expanduser()
-    else:
-        OUTPUT_DIR = default_output_dir()
+    REPORT_LANG = normalize_lang_code(args.lang)
+    OUTPUT_DIR = resolve_output_dir(args.output_dir, REPORT_LANG)
     SINCE_DAYS = args.since_days
     SINCE_DATE = args.since_date
     REDACT_PROMPTS = bool(args.redact_prompts)
@@ -737,7 +1118,7 @@ def write_report(
     report_path = OUTPUT_DIR / "token_report.md"
 
     cutoff = get_cutoff()
-    date_range = f"Since {cutoff.strftime('%Y-%m-%d')}" if cutoff else "All time"
+    date_range = format_date_range(cutoff)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     grand_input = sum(s["usage"].get("input_tokens", 0) for s in summaries)
@@ -761,25 +1142,32 @@ def write_report(
     workspace_rows = build_group_breakdown(all_sessions, "workspace_kind")
 
     lines = [
-        "# Codex Token Usage Analysis",
+        tr("report_title"),
         "",
-        f"Generated: {now} | Range: {date_range}",
+        tr("report_generated", now=now, date_range=date_range),
         "",
-        "## Grand Totals",
+        tr("report_grand_totals"),
         "",
-        f"- **Projects**: {len(summaries)}",
-        f"- **Sessions**: {total_sessions:,}",
-        f"- **Total tokens**: {format_tokens(grand_total)}",
-        f"  - Input: {format_tokens(grand_input)}",
-        f"  - Cached input: {format_tokens(grand_cached)}",
-        f"  - Output: {format_tokens(grand_output)}",
-        f"  - Reasoning output: {format_tokens(grand_reasoning)}",
-        f"- **Subagent sessions**: {total_subagent_count:,} ({format_tokens(total_subagent_tokens)} tokens)",
-        f"- **Subagents with missing parent in range**: {orphan_subagent_count:,}",
+        tr("report_projects", count=len(summaries)),
+        tr("report_sessions", count=f"{total_sessions:,}"),
+        tr("report_total_tokens", value=format_tokens(grand_total)),
+        tr("report_input", value=format_tokens(grand_input)),
+        tr("report_cached_input", value=format_tokens(grand_cached)),
+        tr("report_output", value=format_tokens(grand_output)),
+        tr("report_reasoning_output", value=format_tokens(grand_reasoning)),
+        tr(
+            "report_subagent_sessions",
+            count=f"{total_subagent_count:,}",
+            tokens=format_tokens(total_subagent_tokens),
+        ),
+        tr(
+            "report_subagents_missing_parent",
+            count=f"{orphan_subagent_count:,}",
+        ),
         "",
-        "## By Project",
+        tr("report_by_project"),
         "",
-        "| Project | Sessions | Total | Input | Cached Input | Output | Reasoning | Subagents |",
+        f"| {tr('table_project')} | {tr('table_sessions')} | {tr('col_total')} | {tr('col_input')} | {tr('col_cached_input')} | {tr('col_output')} | {tr('col_reasoning')} | {tr('table_subagents')} |",
         "|---------|----------|-------|-------|--------------|--------|-----------|-----------|",
     ]
 
@@ -795,42 +1183,53 @@ def write_report(
             f"| {summary['subagent_count']} ({format_tokens(summary['subagent_tokens'])}) |"
         )
 
-    lines.extend(["", "## Most Costly Sessions", ""])
+    lines.extend(["", tr("report_most_costly_sessions"), ""])
 
     for index, (project_name, session) in enumerate(find_costly_sessions(projects, top_n=25), 1):
         project_label = format_table_cell(project_name, limit=80)
         lines.append(
-            f"### {index}. {project_label} — {format_tokens(session['total_tokens'])} tokens"
+            tr(
+                "report_session_title",
+                index=index,
+                project=project_label,
+                tokens=format_tokens(session["total_tokens"]),
+            )
         )
-        lines.append(f"- **Session**: `{session['session_id']}`")
+        lines.append(tr("report_session_label", session_id=session["session_id"]))
         if session.get("timestamp_start"):
             lines.append(
-                f"- **Started**: {session['timestamp_start'][:19].replace('T', ' ')}"
+                tr(
+                    "report_started_label",
+                    value=session["timestamp_start"][:19].replace("T", " "),
+                )
             )
         if session.get("cwd"):
-            lines.append(f"- **CWD**: `{session['cwd']}`")
+            lines.append(tr("report_cwd_label", value=session["cwd"]))
         child_count = len(children_by_parent.get(session["session_id"], []))
-        lines.append(f"- **Direct subagents**: {child_count}")
+        lines.append(tr("report_direct_subagents_label", count=child_count))
 
         usage = session["usage"]
         lines.append(
-            f"- **Tokens**: input={format_tokens(usage.get('input_tokens', 0))}, "
-            f"cached_input={format_tokens(usage.get('cached_input_tokens', 0))}, "
-            f"output={format_tokens(usage.get('output_tokens', 0))}, "
-            f"reasoning={format_tokens(usage.get('reasoning_output_tokens', 0))}"
+            tr(
+                "report_tokens_label",
+                input=format_tokens(usage.get("input_tokens", 0)),
+                cached_input=format_tokens(usage.get("cached_input_tokens", 0)),
+                output=format_tokens(usage.get("output_tokens", 0)),
+                reasoning=format_tokens(usage.get("reasoning_output_tokens", 0)),
+            )
         )
 
         if session["prompts"]:
             first_prompt = get_first_prompt_text(session, limit=400)
-            lines.append("- **First prompt**:")
+            lines.append(tr("report_first_prompt_label"))
             lines.append(f"  > {first_prompt}")
         lines.append("")
 
     lines.extend(
         [
-            "## Highest Input/Output Ratios",
+            tr("report_highest_ratios"),
             "",
-            "| # | Project | Session | Input/Output | Cached/Output | Total Tokens | First Prompt |",
+            f"| # | {tr('table_project')} | {tr('col_session')} | Input/Output | Cached/Output | {tr('table_total_tokens')} | {tr('col_first_prompt')} |",
             "|---|---------|---------|--------------|---------------|--------------|--------------|",
         ]
     )
@@ -849,9 +1248,9 @@ def write_report(
     lines.extend(
         [
             "",
-            "## Subagent Overhead Hotspots",
+            tr("report_subagent_overhead_hotspots"),
             "",
-            "| # | Project | Parent Session | Descendant Subagents | Descendant Tokens | Overhead vs Parent | Parent Tokens | First Prompt |",
+            f"| # | {tr('table_project')} | {tr('col_parent_session')} | {tr('col_descendant_subagents')} | {tr('col_descendant_tokens')} | {tr('col_overhead_vs_parent')} | {tr('col_parent_tokens')} | {tr('col_first_prompt')} |",
             "|---|---------|----------------|---------------------|-------------------|------------------|---------------|--------------|",
         ]
     )
@@ -872,9 +1271,9 @@ def write_report(
     lines.extend(
         [
             "",
-            "## Most Costly Subagents",
+            tr("report_most_costly_subagents"),
             "",
-            "| # | Project | Parent Session | Subagent | Role | Total Tokens | Input | Cached Input | Output |",
+            f"| # | {tr('table_project')} | {tr('col_parent_session')} | {tr('col_subagent')} | {tr('col_role')} | {tr('table_total_tokens')} | {tr('col_input')} | {tr('col_cached_input')} | {tr('col_output')} |",
             "|---|---------|----------------|----------|------|--------------|-------|--------------|--------|",
         ]
     )
@@ -894,8 +1293,8 @@ def write_report(
             f"| {format_tokens(usage.get('output_tokens', 0))} |"
         )
 
-    lines.extend(["", "## Subagent Usage By Project", ""])
-    lines.append("| Project | Subagent Sessions | Subagent Tokens |")
+    lines.extend(["", tr("report_subagent_usage_by_project"), ""])
+    lines.append(f"| {tr('table_project')} | {tr('col_subagent_sessions')} | {tr('col_subagent_tokens')} |")
     lines.append("|---------|-------------------|-----------------|")
 
     project_subagent_stats = []
@@ -914,9 +1313,9 @@ def write_report(
     lines.extend(
         [
             "",
-            "## Usage By Originator",
+            tr("report_usage_by_originator"),
             "",
-            "| Originator | Sessions | Total Tokens | Subagent Sessions |",
+            f"| {tr('col_originator')} | {tr('table_sessions')} | {tr('table_total_tokens')} | {tr('col_subagent_sessions')} |",
             "|------------|----------|--------------|-------------------|",
         ]
     )
@@ -929,9 +1328,9 @@ def write_report(
     lines.extend(
         [
             "",
-            "## Usage By Agent Role",
+            tr("report_usage_by_agent_role"),
             "",
-            "| Agent Role | Sessions | Total Tokens | Subagent Sessions |",
+            f"| {tr('col_agent_role')} | {tr('table_sessions')} | {tr('table_total_tokens')} | {tr('col_subagent_sessions')} |",
             "|------------|----------|--------------|-------------------|",
         ]
     )
@@ -944,9 +1343,9 @@ def write_report(
     lines.extend(
         [
             "",
-            "## Usage By Workspace Kind",
+            tr("report_usage_by_workspace_kind"),
             "",
-            "| Workspace Kind | Sessions | Total Tokens | Subagent Sessions |",
+            f"| {tr('col_workspace_kind')} | {tr('table_sessions')} | {tr('table_total_tokens')} | {tr('col_subagent_sessions')} |",
             "|----------------|----------|--------------|-------------------|",
         ]
     )
@@ -959,9 +1358,9 @@ def write_report(
     lines.extend(
         [
             "",
-            "## Most Instruction-Heavy Sessions",
+            tr("report_instruction_heavy"),
             "",
-            "| # | Project | Session | Base Instr Chars | Max Turn Instr Chars | Combined Chars | Est. Tokens | First Prompt |",
+            f"| # | {tr('table_project')} | {tr('col_session')} | {tr('col_base_instr_chars')} | {tr('col_max_turn_instr_chars')} | {tr('col_combined_chars')} | {tr('col_est_tokens')} | {tr('col_first_prompt')} |",
             "|---|---------|---------|------------------|----------------------|----------------|-------------|--------------|",
         ]
     )
@@ -978,7 +1377,7 @@ def write_report(
             f"| {format_table_cell(get_first_prompt_text(session, limit=90))} |"
         )
 
-    lines.extend(["", "## Likely Savings Opportunities", ""])
+    lines.extend(["", tr("report_likely_savings"), ""])
 
     top_non_subagent_sessions = find_costly_sessions(projects, top_n=5)
     top_non_subagent_total = sum(session["total_tokens"] for _, session in top_non_subagent_sessions)
@@ -987,19 +1386,32 @@ def write_report(
     if total_subagent_tokens > 0:
         share = total_subagent_tokens / max(grand_total, 1)
         lines.append(
-            f"- Subagent usage is a major cost center: {format_tokens(total_subagent_tokens)} of {format_tokens(grand_total)} total tokens ({format_percent(share * 100)}) are in subagent sessions."
+            tr(
+                "insight_subagent_cost",
+                subagent_tokens=format_tokens(total_subagent_tokens),
+                grand_total=format_tokens(grand_total),
+                share=format_percent(share * 100),
+            )
         )
 
     if grand_output > 0:
         cached_output_ratio = grand_cached / grand_output
         input_output_ratio = grand_input / grand_output
         lines.append(
-            f"- Context replay dominates output: input/output is {format_ratio(input_output_ratio)} and cached-input/output is {format_ratio(cached_output_ratio)} across the whole report window."
+            tr(
+                "insight_context_replay",
+                input_output_ratio=format_ratio(input_output_ratio),
+                cached_output_ratio=format_ratio(cached_output_ratio),
+            )
         )
 
     if top_non_subagent_sessions:
         lines.append(
-            f"- A small number of sessions dominate spend: the top 5 non-subagent sessions account for {format_tokens(top_non_subagent_total)} tokens ({format_percent(top_non_subagent_share * 100)} of total usage)."
+            tr(
+                "insight_top_sessions_share",
+                tokens=format_tokens(top_non_subagent_total),
+                share=format_percent(top_non_subagent_share * 100),
+            )
         )
 
     hottest_overhead = find_subagent_overhead_outliers(projects, children_by_parent, top_n=1)
@@ -1007,14 +1419,27 @@ def write_report(
         project_name, parent_session, descendant_count, descendant_tokens = hottest_overhead[0]
         overhead_ratio = descendant_tokens / max(parent_session["total_tokens"], 1)
         lines.append(
-            f"- The largest subagent hotspot is `{parent_session['session_id']}` in {project_name}: {descendant_count} descendant subagents consumed {format_tokens(descendant_tokens)} tokens, equal to {format_percent(overhead_ratio * 100)} of the parent session's own token count."
+            tr(
+                "insight_hotspot",
+                session_id=parent_session["session_id"],
+                project=project_name,
+                descendant_count=descendant_count,
+                descendant_tokens=format_tokens(descendant_tokens),
+                overhead_ratio=format_percent(overhead_ratio * 100),
+            )
         )
 
     heaviest_instruction_sessions = find_instruction_heavy_sessions(projects, top_n=1)
     if heaviest_instruction_sessions:
         project_name, session = heaviest_instruction_sessions[0]
         lines.append(
-            f"- The heaviest static instruction payload observed was in `{session['session_id']}` ({project_name}) at {format_tokens(session['instruction_chars'])} characters, or about ~{format_tokens(session['instruction_token_estimate'])} tokens before any repo/file context was added."
+            tr(
+                "insight_instruction_heavy",
+                session_id=session["session_id"],
+                project=project_name,
+                instruction_chars=format_tokens(session["instruction_chars"]),
+                instruction_tokens=format_tokens(session["instruction_token_estimate"]),
+            )
         )
 
     report_path.write_text("\n".join(lines) + "\n")
@@ -1132,6 +1557,7 @@ def build_json_report(
                 "since_days": SINCE_DAYS,
                 "since_date": SINCE_DATE,
                 "redact_prompts": REDACT_PROMPTS,
+                "report_lang": REPORT_LANG,
             },
             "paths": {
                 "codex_home": str(CODEX_HOME),
@@ -1198,15 +1624,30 @@ def write_prompts_by_project(projects: dict[str, list[dict[str, Any]]]) -> Path:
         out_path = prompts_dir / f"{safe_name}.md"
 
         lines = [
-            f"# Prompts: {project_name}",
+            tr("prompts_title", project=project_name),
             "",
-            f"{len(all_prompts)} prompts across {len(sessions)} sessions",
+            tr(
+                "prompts_summary",
+                prompt_count=len(all_prompts),
+                session_count=len(sessions),
+            ),
             "",
         ]
 
         for index, prompt in enumerate(all_prompts, 1):
-            timestamp = prompt["timestamp"][:19].replace("T", " ") if prompt["timestamp"] else "unknown"
-            lines.append(f"## {index}. [{timestamp}] Session `{prompt['session_id'][:8]}`")
+            timestamp = (
+                prompt["timestamp"][:19].replace("T", " ")
+                if prompt["timestamp"]
+                else tr("unknown")
+            )
+            lines.append(
+                tr(
+                    "prompts_session_item",
+                    index=index,
+                    timestamp=timestamp,
+                    session_id=prompt["session_id"][:8],
+                )
+            )
             lines.append("")
             if REDACT_PROMPTS:
                 lines.append(redact_prompt_text(prompt["text"]))
@@ -1232,10 +1673,19 @@ def print_summary(
     project_width = max(24, min(52, max_project_name, max_project_width_for_terminal))
 
     print(
-        f"\nTotal: {format_tokens(grand_total)} tokens across {total_sessions} sessions "
-        f"in {len(summaries)} projects\n"
+        "\n"
+        + tr(
+            "console_total_summary",
+            tokens=format_tokens(grand_total),
+            sessions=total_sessions,
+            projects=len(summaries),
+        )
+        + "\n"
     )
-    print(f"{'Project':<{project_width}} {'Sessions':>8} {'Total Tokens':>14} {'Subagents':>10}")
+    print(
+        f"{tr('table_project'):<{project_width}} {tr('table_sessions'):>8} "
+        f"{tr('table_total_tokens'):>14} {tr('table_subagents'):>10}"
+    )
     print("-" * (project_width + 35))
 
     for summary in summaries[:30]:
@@ -1245,10 +1695,10 @@ def print_summary(
             f"{format_tokens(summary['total_tokens']):>14} {summary['subagent_count']:>10,}"
         )
 
-    print("\nTop 10 costliest sessions:")
+    print(f"\n{tr('console_top_10')}")
     for project_name, session in find_costly_sessions(projects, top_n=10):
         started = session["timestamp_start"][:10] if session["timestamp_start"] else "?"
-        first_prompt = "no prompt captured"
+        first_prompt = tr("console_no_prompt")
         if session["prompts"]:
             first_prompt = get_first_prompt_text(session, limit=max(50, terminal_columns - 12))
         prompt_width = max(50, terminal_columns - 12)
@@ -1264,14 +1714,14 @@ def main(argv: list[str] | None = None) -> int:
         args = parse_args(argv)
         configure_runtime(args)
     except ValueError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        print(f"{tr('error_prefix')}: {exc}", file=sys.stderr)
         return 2
 
-    print("Scanning Codex sessions...")
+    print(tr("console_scanning"))
     projects, children_by_parent, sessions_by_id = analyze_all()
     summaries = summarize_projects(projects)
 
-    print(f"Found {len(projects)} projects")
+    print(tr("console_found_projects", count=len(projects)))
     print_summary(summaries, projects)
 
     report_path = write_report(projects, summaries, children_by_parent, sessions_by_id)
@@ -1281,10 +1731,10 @@ def main(argv: list[str] | None = None) -> int:
         json_path = write_json_report(report_data)
     prompts_dir = write_prompts_by_project(projects)
 
-    print(f"\nFull report: {report_path}")
+    print("\n" + tr("console_full_report", path=report_path))
     if json_path:
-        print(f"JSON report: {json_path}")
-    print(f"Prompts: {prompts_dir}")
+        print(tr("console_json_report", path=json_path))
+    print(tr("console_prompts", path=prompts_dir))
     return 0
 
 

@@ -1,7 +1,7 @@
 import importlib.util
 import json
-import tempfile
 import unittest
+from uuid import uuid4
 from pathlib import Path
 from unittest.mock import patch
 
@@ -24,8 +24,8 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         cls.mod = load_module()
 
     def test_parse_session_extracts_usage_and_prompt(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            file_path = Path(tmp_dir) / "session.jsonl"
+        file_path = Path(f"tmp-test-session-{uuid4().hex}.jsonl")
+        try:
             lines = [
                 {
                     "type": "session_meta",
@@ -102,6 +102,8 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertTrue(session["prompts"])
             self.assertEqual(session["prompts"][0]["text"], "hello analyzer")
             self.assertEqual(session["prompts"][0]["timestamp"], "2026-04-10T12:01:00Z")
+        finally:
+            file_path.unlink(missing_ok=True)
 
     def test_summarize_projects_aggregates_totals(self):
         projects = {
@@ -177,6 +179,38 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertIn("broken", normalized)
         self.assertNotIn("[broken](", normalized)
 
+    def test_normalize_lang_code_aliases(self):
+        self.assertEqual(self.mod.normalize_lang_code("en"), "en")
+        self.assertEqual(self.mod.normalize_lang_code("pt"), "pt-br")
+        self.assertEqual(self.mod.normalize_lang_code("pt-PT"), "pt-pt")
+        self.assertEqual(self.mod.normalize_lang_code("es-es"), "es")
+        self.assertEqual(self.mod.normalize_lang_code("unsupported"), "en")
+
+    def test_translation_fallback_and_language_switch(self):
+        with patch.object(self.mod, "REPORT_LANG", "es"):
+            self.assertEqual(self.mod.tr("table_project"), "Proyecto")
+        with patch.object(self.mod, "REPORT_LANG", "unsupported"):
+            self.assertEqual(self.mod.tr("table_project"), "Project")
+
+    def test_default_output_dir_includes_language_and_timestamp(self):
+        output_dir = self.mod.default_output_dir("pt-br")
+        self.assertEqual(output_dir.parent.name, "reports")
+        self.assertRegex(output_dir.name, r"^pt-br-\d{4}-\d{2}-\d{2}_\d{6}$")
+
+    def test_resolve_output_dir_reports_root_builds_timestamped_subfolder(self):
+        output_dir = self.mod.resolve_output_dir("reports", "es")
+        self.assertEqual(output_dir.parent.name, "reports")
+        self.assertRegex(output_dir.name, r"^es-\d{4}-\d{2}-\d{2}_\d{6}$")
+
+    def test_resolve_output_dir_language_subdir_builds_timestamped_subfolder(self):
+        output_dir = self.mod.resolve_output_dir("reports/pt-br", "pt-br")
+        self.assertEqual(output_dir.parent.name, "reports")
+        self.assertRegex(output_dir.name, r"^pt-br-\d{4}-\d{2}-\d{2}_\d{6}$")
+
+    def test_resolve_output_dir_custom_path_is_kept(self):
+        output_dir = self.mod.resolve_output_dir("reports/custom-folder", "pt-br")
+        self.assertEqual(output_dir, Path("reports/custom-folder"))
+
     def test_short_session_id(self):
         self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
         self.assertEqual(self.mod.short_session_id("12345678"), "12345678")
@@ -245,8 +279,8 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertEqual(cached_ratio, 2.5)
 
     def test_parse_session_uses_last_token_count_event(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            file_path = Path(tmp_dir) / "session.jsonl"
+        file_path = Path(f"tmp-test-session-{uuid4().hex}.jsonl")
+        try:
             lines = [
                 {
                     "type": "session_meta",
@@ -307,6 +341,8 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
                 session["cached_output_ratio"],
                 session["cached_input_to_output_ratio"],
             )
+        finally:
+            file_path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

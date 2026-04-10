@@ -5,6 +5,7 @@ Understand exactly how your Codex sessions consume tokens.
 > ℹ️ **Codex** is an OpenAI product. This project is an independent local analyzer for Codex session logs.
 
 This tool scans your local Codex logs and generates a **clear, structured analysis** of usage, costs, prompts, and agent behavior.
+It also supports localized console/report output with English as the default base language.
 
 ## 🚀 What It Does
 
@@ -61,7 +62,7 @@ py analyze-codex-tokens.py
 Default location:
 
 ```
-./reports/YYYY-MM-DD_HHMMSS/
+./reports/<lang>-YYYY-MM-DD_HHMMSS/
 ```
 
 Files generated:
@@ -77,6 +78,7 @@ You can run with direct CLI flags (recommended for CI/scripts):
 ```bash
 python analyze-codex-tokens.py \
   --since-days 7 \
+  --lang pt-br \
   --output-dir ./reports \
   --redact-prompts \
   --json
@@ -85,7 +87,7 @@ python analyze-codex-tokens.py \
 Windows PowerShell:
 
 ```powershell
-py analyze-codex-tokens.py --since-days 7 --output-dir .\reports --redact-prompts --json
+py analyze-codex-tokens.py --since-days 7 --lang pt-br --output-dir .\reports --redact-prompts --json
 ```
 
 Available flags:
@@ -94,6 +96,7 @@ Available flags:
 * `--since-date YYYY-MM-DD`
 * `--codex-home PATH`
 * `--output-dir PATH`
+* `--lang en|pt-br|pt-pt|es`
 * `--redact-prompts` / `--no-redact-prompts`
 * `--json` / `--no-json`
 
@@ -139,10 +142,10 @@ export OUTPUT_DIR="/path/to/output"
 $env:OUTPUT_DIR="C:\path\to\output"
 ```
 
-If `OUTPUT_DIR` is not set and `--output-dir` is not provided, the script creates a timestamped folder under:
+If `OUTPUT_DIR` is not set and `--output-dir` is not provided, the script creates a language-prefixed timestamped folder under:
 
 ```
-./reports/<timestamp>/
+./reports/<lang>-<timestamp>/
 ```
 
 ### Redact prompts in outputs
@@ -164,6 +167,55 @@ export WRITE_JSON=true
 ```powershell
 $env:WRITE_JSON="true"
 ```
+
+### Language for console/report output
+
+```bash
+export REPORT_LANG="pt-br"
+```
+
+```powershell
+$env:REPORT_LANG="pt-br"
+```
+
+Supported values:
+
+* `en` (default)
+* `pt-br`
+* `pt-pt`
+* `es`
+
+Examples:
+
+Generate report in Brazilian Portuguese with automatic folder naming (PowerShell):
+
+```powershell
+py analyze-codex-tokens.py --lang pt-br
+```
+
+Generate report in European Portuguese with automatic folder naming (Bash):
+
+```bash
+python analyze-codex-tokens.py --lang pt-pt
+```
+
+Use environment variable in PowerShell, then run normally:
+
+```powershell
+$env:REPORT_LANG="es"
+py analyze-codex-tokens.py
+```
+
+Use environment variable in Windows CMD:
+
+```cmd
+set REPORT_LANG=en
+py analyze-codex-tokens.py
+```
+
+`--lang` takes precedence over `REPORT_LANG` when both are set.
+
+If you use `--output-dir .\reports` (or `./reports/<lang>`), the tool also auto-creates `<lang>-<timestamp>` inside `reports`.
 
 ## 🧠 Key Features
 
