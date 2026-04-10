@@ -365,17 +365,23 @@ def get_first_prompt_text(session: dict[str, Any], limit: int = 160) -> str:
 
 
 def compute_input_output_ratio(session: dict[str, Any]) -> float | None:
-    output_tokens = session["usage"].get("output_tokens", 0)
+    usage = session.get("usage")
+    if not isinstance(usage, dict):
+        usage = {}
+    output_tokens = usage.get("output_tokens", 0)
     if output_tokens <= 0:
         return None
-    return session["usage"].get("input_tokens", 0) / output_tokens
+    return usage.get("input_tokens", 0) / output_tokens
 
 
 def compute_cached_input_to_output_ratio(session: dict[str, Any]) -> float | None:
-    output_tokens = session["usage"].get("output_tokens", 0)
+    usage = session.get("usage")
+    if not isinstance(usage, dict):
+        usage = {}
+    output_tokens = usage.get("output_tokens", 0)
     if output_tokens <= 0:
         return None
-    return session["usage"].get("cached_input_tokens", 0) / output_tokens
+    return usage.get("cached_input_tokens", 0) / output_tokens
 
 
 def compute_cached_output_ratio(session: dict[str, Any]) -> float | None:

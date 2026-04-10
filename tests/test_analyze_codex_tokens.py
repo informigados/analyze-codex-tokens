@@ -186,6 +186,8 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertEqual(self.mod.short_session_id("1234567890", size=5), "12345...")
         self.assertEqual(self.mod.short_session_id("12345", size=5), "12345")
         self.assertEqual(self.mod.short_session_id("1234", size=5), "1234")
+        self.assertEqual(self.mod.short_session_id("1234567890", size=0), "...")
+        self.assertEqual(self.mod.short_session_id("1234567890", size=-1), "123456789...")
 
     def test_redact_prompt_text(self):
         redacted = self.mod.redact_prompt_text("secret prompt content")
@@ -218,6 +220,19 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             {"usage": {"cached_input_tokens": 0, "output_tokens": 100}}
         )
         self.assertEqual(ratio_zero_cached, 0.0)
+
+        ratio_missing_usage = self.mod.compute_cached_input_to_output_ratio({})
+        self.assertIsNone(ratio_missing_usage)
+
+        ratio_missing_cached_input = self.mod.compute_cached_input_to_output_ratio(
+            {"usage": {"output_tokens": 100}}
+        )
+        self.assertEqual(ratio_missing_cached_input, 0.0)
+
+        ratio_missing_output_tokens = self.mod.compute_cached_input_to_output_ratio(
+            {"usage": {"cached_input_tokens": 250}}
+        )
+        self.assertIsNone(ratio_missing_output_tokens)
 
     def test_compute_cached_input_to_output_ratio_with_session_usage_dict(self):
         session = {"usage": {"cached_input_tokens": 250, "output_tokens": 100}}
