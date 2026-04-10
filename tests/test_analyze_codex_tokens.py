@@ -161,6 +161,8 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         normalized = self.mod.normalize_prompt_for_display(text)
         self.assertIn("Doc", normalized)
         self.assertNotIn("[Doc](", normalized)
+        self.assertIn("broken", normalized)
+        self.assertNotIn("[broken](", normalized)
 
     def test_short_session_id(self):
         self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
@@ -168,6 +170,9 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertEqual(self.mod.short_session_id("1234"), "1234")
         self.assertEqual(self.mod.short_session_id(""), "?")
         self.assertEqual(self.mod.short_session_id(None), "?")
+        self.assertEqual(self.mod.short_session_id("1234567890", size=5), "12345...")
+        self.assertEqual(self.mod.short_session_id("12345", size=5), "12345")
+        self.assertEqual(self.mod.short_session_id("1234", size=5), "1234")
 
     def test_redact_prompt_text(self):
         redacted = self.mod.redact_prompt_text("secret prompt content")
@@ -200,6 +205,65 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             {"usage": {"cached_input_tokens": 0, "output_tokens": 100}}
         )
         self.assertEqual(ratio_zero_cached, 0.0)
+
+    def test_compute_cached_input_to_output_ratio_with_session_usage_dict(self):
+        session = {"usage": {"cached_input_tokens": 250, "output_tokens": 100}}
+        cached_ratio = self.mod.compute_cached_input_to_output_ratio(session)
+        self.assertEqual(cached_ratio, 2.5)
+
+    def test_parse_session_uses_last_token_count_event(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "session.jsonl"
+            lines = [
+                {
+                    "type": "session_meta",
+                    "timestamp": "2026-04-10T12:00:00Z",
+                    "payload": {
+                        "id": "sess-2",
+                        "cwd": "C:/work/my-project",
+                        "git": {"repository_url": "https://github.com/example/my-project.git"},
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "total_token_usage": {
+                                "input_tokens": 200,
+                                "cached_input_tokens": 50,
+                                "output_tokens": 20,
+                                "reasoning_output_tokens": 5,
+                                "total_tokens": 220,
+                            }
+                        },
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "total_token_usage": {
+                                "input_tokens": 500,
+                                "cached_input_tokens": 120,
+                                "output_tokens": 50,
+                                "reasoning_output_tokens": 12,
+                                "total_tokens": 550,
+                            }
+                        },
+                    },
+                },
+            ]
+            file_path.write_text("\n".join(json.dumps(line) for line in lines), encoding="utf-8")
+
+            session = self.mod.parse_session(file_path)
+            self.assertIsNotNone(session)
+            self.assertEqual(session["usage"]["input_tokens"], 500)
+            self.assertEqual(session["usage"]["cached_input_tokens"], 120)
+            self.assertEqual(session["usage"]["output_tokens"], 50)
+            self.assertEqual(session["usage"]["reasoning_output_tokens"], 12)
+            self.assertEqual(session["usage"]["total_tokens"], 550)
 
 
 if __name__ == "__main__":
