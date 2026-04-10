@@ -584,6 +584,8 @@ def format_table_cell(value: Any, limit: int | None = None) -> str:
 
 
 def short_session_id(session_id: str | None, size: int = 8) -> str:
+    if not isinstance(size, int) or isinstance(size, bool):
+        raise TypeError("size must be an integer")
     if size < 0:
         raise ValueError("size must be >= 0")
     if size == 0:

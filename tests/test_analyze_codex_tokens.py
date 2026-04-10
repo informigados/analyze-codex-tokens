@@ -3,7 +3,7 @@ import json
 import os
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -221,15 +221,12 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertIsNone(self.mod.parse_optional_int_env("TEST_OPTIONAL_INT"))
 
     def test_default_output_dir_includes_language_and_timestamp(self):
-        before = datetime.now()
-        output_dir = self.mod.default_output_dir("pt-br")
-        after = datetime.now()
+        fixed_now = datetime(2026, 4, 1, 12, 34, 56)
+        with patch.object(self.mod, "datetime") as mock_datetime:
+            mock_datetime.now.return_value = fixed_now
+            output_dir = self.mod.default_output_dir("pt-br")
         self.assertEqual(output_dir.parent.name, "reports")
-        self.assertRegex(output_dir.name, r"^pt-br-\d{4}-\d{2}-\d{2}_\d{6}$")
-        timestamp_part = output_dir.name[len("pt-br-") :]
-        parsed_timestamp = datetime.strptime(timestamp_part, "%Y-%m-%d_%H%M%S")
-        self.assertGreaterEqual(parsed_timestamp, before - timedelta(seconds=2))
-        self.assertLessEqual(parsed_timestamp, after + timedelta(seconds=2))
+        self.assertEqual(output_dir.name, "pt-br-2026-04-01_123456")
 
     def test_resolve_output_dir_reports_root_builds_timestamped_subfolder(self):
         output_dir = self.mod.resolve_output_dir("reports", "es")
@@ -279,6 +276,12 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertEqual(self.mod.short_session_id("1234567890", size=0), "")
         with self.assertRaises(ValueError):
             self.mod.short_session_id("1234567890", size=-1)
+        with self.assertRaises(TypeError):
+            self.mod.short_session_id("1234567890", size=None)
+        with self.assertRaises(TypeError):
+            self.mod.short_session_id("1234567890", size=3.5)
+        with self.assertRaises(TypeError):
+            self.mod.short_session_id("1234567890", size="5")
 
     def test_redact_prompt_text(self):
         redacted = self.mod.redact_prompt_text("secret prompt content")
