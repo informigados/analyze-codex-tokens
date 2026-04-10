@@ -165,7 +165,11 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertNotIn("[broken](", normalized)
 
     def test_short_session_id(self):
-        self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
+        self.assertEqual(
+            self.mod.short_session_id("1234567890"),
+            self.mod.short_session_id("1234567890", size=8),
+        )
+        self.assertEqual(self.mod.short_session_id("1234567890", size=8), "12345678...")
         self.assertEqual(self.mod.short_session_id("12345678"), "12345678")
         self.assertEqual(self.mod.short_session_id("1234"), "1234")
         self.assertEqual(self.mod.short_session_id(""), "?")
