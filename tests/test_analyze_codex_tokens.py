@@ -1,7 +1,8 @@
 import importlib.util
 import json
+import os
+import tempfile
 import unittest
-from uuid import uuid4
 from pathlib import Path
 from unittest.mock import patch
 
@@ -24,8 +25,8 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         cls.mod = load_module()
 
     def test_parse_session_extracts_usage_and_prompt(self):
-        file_path = Path(f"tmp-test-session-{uuid4().hex}.jsonl")
-        try:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "tmp-test-session.jsonl"
             lines = [
                 {
                     "type": "session_meta",
@@ -102,8 +103,6 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertTrue(session["prompts"])
             self.assertEqual(session["prompts"][0]["text"], "hello analyzer")
             self.assertEqual(session["prompts"][0]["timestamp"], "2026-04-10T12:01:00Z")
-        finally:
-            file_path.unlink(missing_ok=True)
 
     def test_summarize_projects_aggregates_totals(self):
         projects = {
@@ -189,8 +188,32 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
     def test_translation_fallback_and_language_switch(self):
         with patch.object(self.mod, "REPORT_LANG", "es"):
             self.assertEqual(self.mod.tr("table_project"), "Proyecto")
+            self.assertEqual(
+                self.mod.tr("date_range_since", date="2026-03-30"),
+                "Desde 2026-03-30",
+            )
         with patch.object(self.mod, "REPORT_LANG", "unsupported"):
             self.assertEqual(self.mod.tr("table_project"), "Project")
+
+    def test_parse_optional_int_env_valid_integer(self):
+        with patch.dict(os.environ, {"TEST_OPTIONAL_INT": "42"}, clear=False):
+            self.assertEqual(self.mod.parse_optional_int_env("TEST_OPTIONAL_INT"), 42)
+
+    def test_parse_optional_int_env_invalid_input_returns_none(self):
+        with patch.dict(os.environ, {"TEST_OPTIONAL_INT": "not-an-int"}, clear=False):
+            self.assertIsNone(self.mod.parse_optional_int_env("TEST_OPTIONAL_INT"))
+
+    def test_parse_optional_int_env_empty_string_returns_none(self):
+        with patch.dict(os.environ, {"TEST_OPTIONAL_INT": ""}, clear=False):
+            self.assertIsNone(self.mod.parse_optional_int_env("TEST_OPTIONAL_INT"))
+
+    def test_parse_optional_int_env_zero_value_returns_none(self):
+        with patch.dict(os.environ, {"TEST_OPTIONAL_INT": "0"}, clear=False):
+            self.assertIsNone(self.mod.parse_optional_int_env("TEST_OPTIONAL_INT"))
+
+    def test_parse_optional_int_env_missing_var_returns_none(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertIsNone(self.mod.parse_optional_int_env("TEST_OPTIONAL_INT"))
 
     def test_default_output_dir_includes_language_and_timestamp(self):
         output_dir = self.mod.default_output_dir("pt-br")
@@ -210,6 +233,27 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
     def test_resolve_output_dir_custom_path_is_kept(self):
         output_dir = self.mod.resolve_output_dir("reports/custom-folder", "pt-br")
         self.assertEqual(output_dir, Path("reports/custom-folder"))
+
+    def test_make_safe_filename_sanitizes_special_characters(self):
+        value = self.mod.make_safe_filename("My: unsafe/file*name?.txt")
+        self.assertTrue(value)
+        self.assertNotIn("/", value)
+        self.assertNotIn("\\", value)
+        self.assertNotIn(":", value)
+        self.assertNotIn("*", value)
+        self.assertNotIn("?", value)
+
+    def test_make_safe_filename_respects_limit(self):
+        value = self.mod.make_safe_filename("abcdefghijklmnopqrstuvwxyz", limit=10)
+        self.assertLessEqual(len(value), 10)
+
+    def test_make_safe_filename_uses_fallback_for_empty_or_only_special_chars(self):
+        self.assertEqual(self.mod.make_safe_filename(""), "unknown")
+        self.assertEqual(self.mod.make_safe_filename("!!!@@@###"), "unknown")
+        self.assertEqual(
+            self.mod.make_safe_filename("!!!@@@###", fallback="report"),
+            "report",
+        )
 
     def test_short_session_id(self):
         self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
@@ -246,6 +290,11 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(excerpt, "secret prompt content")
 
     def test_compute_cached_input_to_output_ratio_edge_cases(self):
+        ratio_normal_values = self.mod.compute_cached_input_to_output_ratio(
+            {"usage": {"cached_input_tokens": 250, "output_tokens": 100}}
+        )
+        self.assertEqual(ratio_normal_values, 2.5)
+
         ratio_zero_output = self.mod.compute_cached_input_to_output_ratio(
             {"usage": {"cached_input_tokens": 250, "output_tokens": 0}}
         )
@@ -280,8 +329,8 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertEqual(cached_ratio, 2.5)
 
     def test_parse_session_uses_last_token_count_event(self):
-        file_path = Path(f"tmp-test-session-{uuid4().hex}.jsonl")
-        try:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "tmp-test-session.jsonl"
             lines = [
                 {
                     "type": "session_meta",
@@ -342,8 +391,6 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
                 session["cached_output_ratio"],
                 session["cached_input_to_output_ratio"],
             )
-        finally:
-            file_path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
