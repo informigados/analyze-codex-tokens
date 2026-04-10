@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "analyze-codex-tokens.py"
@@ -114,23 +115,29 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
 
     def test_prompt_display_helpers_and_redaction(self):
         normalized = self.mod.normalize_prompt_for_display(
-            "# Context from my IDE setup:\n\n## Open tabs:\n- README.md\n\n[Doc](https://example.com)"
+            "# Context from my IDE setup:\n"
+            "\n"
+            "## Open tabs:\n- README.md\n"
+            "## Active file: src/main.py\n"
+            "## My request for Codex: Explain this function\n"
+            "# Files mentioned by the user: src/main.py\n"
+            "\n"
+            "[Doc](https://example.com)"
         )
         self.assertIn("Context:", normalized)
         self.assertIn("Open tabs:", normalized)
+        self.assertIn("Active file:", normalized)
+        self.assertIn("User request:", normalized)
+        self.assertIn("Files:", normalized)
         self.assertNotIn("[Doc](", normalized)
         self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
 
-        original_redact = self.mod.REDACT_PROMPTS
-        try:
-            self.mod.REDACT_PROMPTS = True
+        with patch.object(self.mod, "REDACT_PROMPTS", True):
             excerpt = self.mod.get_first_prompt_text(
                 {"prompts": [{"text": "secret prompt content"}]},
                 limit=120,
             )
             self.assertTrue(excerpt.startswith("[redacted prompt:"))
-        finally:
-            self.mod.REDACT_PROMPTS = original_redact
 
 
 if __name__ == "__main__":

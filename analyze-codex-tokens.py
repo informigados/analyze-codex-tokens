@@ -338,7 +338,7 @@ def normalize_prompt_for_display(text: str) -> str:
     cleaned = cleaned.replace("# Context from my IDE setup:", "Context:")
     cleaned = cleaned.replace("## Active file:", "Active file:")
     cleaned = cleaned.replace("## Open tabs:", "Open tabs:")
-    cleaned = cleaned.replace("## My request for Codex:", "Request:")
+    cleaned = cleaned.replace("## My request for Codex:", "User request:")
     cleaned = cleaned.replace("# Files mentioned by the user:", "Files:")
     cleaned = cleaned.replace("## Files mentioned by the user:", "Files:")
     cleaned = re.sub(r"(^| )#{1,6}\s+", r"\1", cleaned)
