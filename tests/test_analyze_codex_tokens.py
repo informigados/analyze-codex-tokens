@@ -74,8 +74,10 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["total_tokens"], 1100)
             self.assertEqual(session["usage"]["input_tokens"], 1000)
             self.assertEqual(session["input_output_ratio"], 10.0)
-            cached_ratio = self.mod.compute_cached_input_to_output_ratio(session)
-            self.assertEqual(cached_ratio, 2.5)
+            self.assertEqual(
+                self.mod.get_cached_input_to_output_ratio(session),
+                2.5,
+            )
             self.assertEqual(session["base_instruction_chars"], len("base rules"))
             self.assertEqual(
                 session["max_user_instruction_chars"], len("specific instruction")
@@ -165,11 +167,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertNotIn("[broken](", normalized)
 
     def test_short_session_id(self):
-        self.assertEqual(
-            self.mod.short_session_id("1234567890"),
-            self.mod.short_session_id("1234567890", size=8),
-        )
-        self.assertEqual(self.mod.short_session_id("1234567890", size=8), "12345678...")
+        self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
         self.assertEqual(self.mod.short_session_id("12345678"), "12345678")
         self.assertEqual(self.mod.short_session_id("1234"), "1234")
         self.assertEqual(self.mod.short_session_id(""), "?")
