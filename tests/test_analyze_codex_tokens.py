@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -75,7 +76,11 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["total_tokens"], 1100)
             self.assertEqual(session["usage"]["input_tokens"], 1000)
             self.assertEqual(session["input_output_ratio"], 10.0)
-            expected_cached_input_to_output_ratio = 2.5
+            expected_cached_input_tokens = 250
+            expected_output_tokens = 100
+            expected_cached_input_to_output_ratio = (
+                expected_cached_input_tokens / expected_output_tokens
+            )
             self.assertEqual(
                 session["cached_input_to_output_ratio"],
                 expected_cached_input_to_output_ratio,
@@ -216,9 +221,15 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertIsNone(self.mod.parse_optional_int_env("TEST_OPTIONAL_INT"))
 
     def test_default_output_dir_includes_language_and_timestamp(self):
+        before = datetime.now()
         output_dir = self.mod.default_output_dir("pt-br")
+        after = datetime.now()
         self.assertEqual(output_dir.parent.name, "reports")
         self.assertRegex(output_dir.name, r"^pt-br-\d{4}-\d{2}-\d{2}_\d{6}$")
+        timestamp_part = output_dir.name[len("pt-br-") :]
+        parsed_timestamp = datetime.strptime(timestamp_part, "%Y-%m-%d_%H%M%S")
+        self.assertGreaterEqual(parsed_timestamp, before - timedelta(seconds=2))
+        self.assertLessEqual(parsed_timestamp, after + timedelta(seconds=2))
 
     def test_resolve_output_dir_reports_root_builds_timestamped_subfolder(self):
         output_dir = self.mod.resolve_output_dir("reports", "es")
@@ -291,10 +302,17 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(excerpt, "secret prompt content")
 
     def test_compute_cached_input_to_output_ratio_with_normal_values(self):
+        expected_cached_input_tokens = 250
+        expected_output_tokens = 100
         ratio = self.mod.compute_cached_input_to_output_ratio(
-            {"usage": {"cached_input_tokens": 250, "output_tokens": 100}}
+            {
+                "usage": {
+                    "cached_input_tokens": expected_cached_input_tokens,
+                    "output_tokens": expected_output_tokens,
+                }
+            }
         )
-        self.assertEqual(ratio, 2.5)
+        self.assertEqual(ratio, expected_cached_input_tokens / expected_output_tokens)
 
     def test_compute_cached_input_to_output_ratio_with_zero_output_tokens(self):
         ratio = self.mod.compute_cached_input_to_output_ratio(
@@ -382,7 +400,11 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["usage"]["output_tokens"], 50)
             self.assertEqual(session["usage"]["reasoning_output_tokens"], 12)
             self.assertEqual(session["usage"]["total_tokens"], 550)
-            expected_cached_input_to_output_ratio = 2.4
+            expected_cached_input_tokens = 120
+            expected_output_tokens = 50
+            expected_cached_input_to_output_ratio = (
+                expected_cached_input_tokens / expected_output_tokens
+            )
             self.assertEqual(
                 session["cached_input_to_output_ratio"],
                 expected_cached_input_to_output_ratio,
