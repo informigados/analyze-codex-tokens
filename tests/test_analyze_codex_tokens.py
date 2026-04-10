@@ -163,6 +163,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         normalized = self.mod.normalize_prompt_for_display(text)
         self.assertIn("Doc", normalized)
         self.assertNotIn("[Doc](", normalized)
+        self.assertNotIn("https://example.com and", normalized)
         self.assertIn("broken", normalized)
         self.assertNotIn("[broken](", normalized)
 

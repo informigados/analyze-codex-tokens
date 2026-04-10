@@ -335,6 +335,9 @@ def normalize_prompt_for_display(text: str) -> str:
     cleaned = sanitize_text(text)
     # Keep prompt excerpts readable in terminal and markdown tables.
     cleaned = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 ", cleaned)
+    # Handle malformed markdown links that start with URLs but never close.
+    cleaned = re.sub(r"\[([^\]]+)\]\(https?://[^\s)]+\s+and\b", r"\1 ", cleaned)
+    cleaned = re.sub(r"\[([^\]]+)\]\(https?://[^\s)]+", r"\1 ", cleaned)
     # Handle malformed markdown links that miss the closing parenthesis.
     cleaned = re.sub(r"\[([^\]]+)\]\(", r"\1 ", cleaned)
     cleaned = cleaned.replace("# Context from my IDE setup:", "Context:")
