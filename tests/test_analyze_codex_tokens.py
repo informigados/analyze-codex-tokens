@@ -31,7 +31,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             lines = [
                 {
                     "type": "session_meta",
-                    "timestamp": "2026-04-10T12:00:00Z",
+                    "timestamp": "2024-04-10T12:00:00Z",
                     "payload": {
                         "id": "sess-1",
                         "cwd": "C:/work/my-project",
@@ -60,7 +60,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
                 },
                 {
                     "type": "event_msg",
-                    "timestamp": "2026-04-10T12:01:00Z",
+                    "timestamp": "2024-04-10T12:01:00Z",
                     "payload": {
                         "type": "user_message",
                         "message": "hello analyzer",
@@ -107,7 +107,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertIn("prompts", session)
             self.assertTrue(session["prompts"])
             self.assertEqual(session["prompts"][0]["text"], "hello analyzer")
-            self.assertEqual(session["prompts"][0]["timestamp"], "2026-04-10T12:01:00Z")
+            self.assertEqual(session["prompts"][0]["timestamp"], "2024-04-10T12:01:00Z")
 
     def test_summarize_projects_aggregates_totals(self):
         projects = {
@@ -353,7 +353,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             lines = [
                 {
                     "type": "session_meta",
-                    "timestamp": "2026-04-10T12:00:00Z",
+                    "timestamp": "2024-04-10T12:00:00Z",
                     "payload": {
                         "id": "sess-2",
                         "cwd": "C:/work/my-project",
