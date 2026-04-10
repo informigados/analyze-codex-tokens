@@ -76,11 +76,20 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["input_output_ratio"], 10.0)
             cached_ratio = self.mod.get_cached_input_to_output_ratio(session)
             self.assertEqual(cached_ratio, 2.5)
+            self.assertEqual(session["base_instruction_chars"], len("base rules"))
+            self.assertEqual(
+                session["max_user_instruction_chars"], len("specific instruction")
+            )
+            self.assertEqual(
+                session["instruction_chars"],
+                len("base rules") + len("specific instruction"),
+            )
             self.assertEqual(session["prompt_count"], 1)
             self.assertEqual(session["turn_count"], 1)
             self.assertIn("prompts", session)
             self.assertTrue(session["prompts"])
             self.assertEqual(session["prompts"][0]["text"], "hello analyzer")
+            self.assertEqual(session["prompts"][0]["timestamp"], "2026-04-10T12:01:00Z")
 
     def test_summarize_projects_aggregates_totals(self):
         projects = {
