@@ -74,7 +74,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["total_tokens"], 1100)
             self.assertEqual(session["usage"]["input_tokens"], 1000)
             self.assertEqual(session["input_output_ratio"], 10.0)
-            cached_ratio = self.mod.get_cached_input_to_output_ratio(session)
+            cached_ratio = self.mod.compute_cached_input_to_output_ratio(session)
             self.assertEqual(cached_ratio, 2.5)
             self.assertEqual(session["base_instruction_chars"], len("base rules"))
             self.assertEqual(
@@ -146,6 +146,21 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertIn("Files:", normalized)
         self.assertNotIn("[Doc](", normalized)
         self.assertIn("Doc", normalized)
+
+    def test_normalize_prompt_for_display_empty_string(self):
+        normalized = self.mod.normalize_prompt_for_display("")
+        self.assertEqual(normalized, "")
+
+    def test_normalize_prompt_for_display_without_markers(self):
+        text = "Explain the function in src/main.py"
+        normalized = self.mod.normalize_prompt_for_display(text)
+        self.assertEqual(normalized, text)
+
+    def test_normalize_prompt_for_display_malformed_markdown_link(self):
+        text = "See [Doc](https://example.com and [broken](not-a-url"
+        normalized = self.mod.normalize_prompt_for_display(text)
+        self.assertIn("Doc", normalized)
+        self.assertNotIn("[Doc](", normalized)
 
     def test_short_session_id(self):
         self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
