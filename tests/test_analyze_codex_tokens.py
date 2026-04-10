@@ -74,10 +74,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["total_tokens"], 1100)
             self.assertEqual(session["usage"]["input_tokens"], 1000)
             self.assertEqual(session["input_output_ratio"], 10.0)
-            cached_ratio = session.get(
-                "cached_input_to_output_ratio",
-                session.get("cached_output_ratio"),
-            )
+            cached_ratio = self.mod.get_cached_input_to_output_ratio(session)
             self.assertEqual(cached_ratio, 2.5)
             self.assertEqual(session["prompt_count"], 1)
             self.assertEqual(session["turn_count"], 1)
