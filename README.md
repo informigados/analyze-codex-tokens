@@ -4,8 +4,6 @@ Understand exactly how your Codex sessions consume tokens.
 
 This tool scans your local Codex logs and generates a **clear, structured analysis** of usage, costs, prompts, and agent behavior.
 
----
-
 ## 🚀 What It Does
 
 Analyzes `.jsonl` session logs from:
@@ -27,8 +25,6 @@ A complete breakdown of:
 * 🧠 Instruction-heavy sessions
 * 📉 Optimization insights
 
----
-
 ### 🧾 Prompt Extraction
 
 Creates a `/prompts` folder with:
@@ -37,14 +33,10 @@ Creates a `/prompts` folder with:
 * Organized by project
 * Sorted by time
 
----
-
 ## ⚙️ Requirements
 
 * Python 3.10+
 * No external dependencies
-
----
 
 ## ▶️ How to Run
 
@@ -60,8 +52,6 @@ or on Windows:
 py analyze-codex-tokens.py
 ```
 
----
-
 ## 📂 Output
 
 Default location:
@@ -74,8 +64,6 @@ Files generated:
 
 * `token_report.md`
 * `/prompts/*.md`
-
----
 
 ## 🔧 Optional Configuration
 
@@ -103,8 +91,6 @@ export CODEX_HOME="/path/to/.codex"
 export OUTPUT_DIR="/path/to/output"
 ```
 
----
-
 ## 🧠 Key Features
 
 * 🔍 Recursive `.jsonl` discovery (works with VS Code extension)
@@ -112,15 +98,11 @@ export OUTPUT_DIR="/path/to/output"
 * 📊 Deep token breakdown
 * 📈 Identify inefficiencies fast
 
----
-
 ## ⚠️ Notes
 
 * Requires local Codex logs
 * If no data appears, check your `.codex` folder
 * VS Code extension may store additional data in `.sqlite` (not parsed yet)
-
----
 
 ## 📜 License
 
