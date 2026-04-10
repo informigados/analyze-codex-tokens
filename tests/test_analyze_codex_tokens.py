@@ -270,6 +270,15 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertEqual(self.mod.short_session_id("1234567890", size=10), "1234567890")
         self.assertEqual(self.mod.short_session_id(""), "?")
         self.assertEqual(self.mod.short_session_id(None), "?")
+        self.assertEqual(self.mod.short_session_id(1234567890), "12345678...")
+        self.assertEqual(
+            self.mod.short_session_id(["a", "b", "c"], size=6),
+            "['a', ...",
+        )
+        self.assertEqual(
+            self.mod.short_session_id({"k": "v"}, size=4),
+            "{'k'...",
+        )
         self.assertEqual(self.mod.short_session_id("1234567890", size=5), "12345...")
         self.assertEqual(self.mod.short_session_id("12345", size=5), "12345")
         self.assertEqual(self.mod.short_session_id("1234", size=5), "1234")
@@ -307,6 +316,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
     def test_compute_cached_input_to_output_ratio_with_normal_values(self):
         expected_cached_input_tokens = 250
         expected_output_tokens = 100
+        expected_ratio = expected_cached_input_tokens / expected_output_tokens
         ratio = self.mod.compute_cached_input_to_output_ratio(
             {
                 "usage": {
@@ -315,7 +325,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
                 }
             }
         )
-        self.assertEqual(ratio, expected_cached_input_tokens / expected_output_tokens)
+        self.assertEqual(ratio, expected_ratio)
 
     def test_compute_cached_input_to_output_ratio_with_zero_output_tokens(self):
         ratio = self.mod.compute_cached_input_to_output_ratio(
