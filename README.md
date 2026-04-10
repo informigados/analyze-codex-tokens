@@ -104,6 +104,17 @@ export OUTPUT_DIR="/path/to/output"
 * If no data appears, check your `.codex` folder
 * VS Code extension may store additional data in `.sqlite` (not parsed yet)
 
+## 📝 Changelog
+
+### 2026-04-10 (1.0.0)
+
+- Initial release.
+
+## 👥 Authors
+
+- INformigados: https://github.com/informigados/
+- Alex Brito: https://github.com/alexbritodev
+
 ## 📜 License
 
-MIT License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
