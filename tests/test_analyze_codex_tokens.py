@@ -149,6 +149,10 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
 
     def test_short_session_id(self):
         self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
+        self.assertEqual(self.mod.short_session_id("12345678"), "12345678")
+        self.assertEqual(self.mod.short_session_id("1234"), "1234")
+        self.assertEqual(self.mod.short_session_id(""), "?")
+        self.assertEqual(self.mod.short_session_id(None), "?")
 
     def test_redact_prompt_text(self):
         redacted = self.mod.redact_prompt_text("secret prompt content")
@@ -162,6 +166,25 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
                 limit=120,
             )
             self.assertTrue(excerpt.startswith("[redacted prompt:"))
+
+    def test_get_first_prompt_text_without_redaction(self):
+        with patch.object(self.mod, "REDACT_PROMPTS", False):
+            excerpt = self.mod.get_first_prompt_text(
+                {"prompts": [{"text": "secret prompt content"}]},
+                limit=120,
+            )
+            self.assertEqual(excerpt, "secret prompt content")
+
+    def test_compute_cached_input_to_output_ratio_edge_cases(self):
+        ratio_zero_output = self.mod.compute_cached_input_to_output_ratio(
+            {"usage": {"cached_input_tokens": 250, "output_tokens": 0}}
+        )
+        self.assertIsNone(ratio_zero_output)
+
+        ratio_zero_cached = self.mod.compute_cached_input_to_output_ratio(
+            {"usage": {"cached_input_tokens": 0, "output_tokens": 100}}
+        )
+        self.assertEqual(ratio_zero_cached, 0.0)
 
 
 if __name__ == "__main__":
