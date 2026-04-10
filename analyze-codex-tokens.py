@@ -366,11 +366,20 @@ def compute_input_output_ratio(session: dict[str, Any]) -> float | None:
     return session["usage"].get("input_tokens", 0) / output_tokens
 
 
-def compute_cached_output_ratio(session: dict[str, Any]) -> float | None:
+def compute_cached_input_to_output_ratio(session: dict[str, Any]) -> float | None:
     output_tokens = session["usage"].get("output_tokens", 0)
     if output_tokens <= 0:
         return None
     return session["usage"].get("cached_input_tokens", 0) / output_tokens
+
+
+def compute_cached_output_ratio(session: dict[str, Any]) -> float | None:
+    # Backward-compatible alias for old name.
+    return compute_cached_input_to_output_ratio(session)
+
+
+def get_cached_input_to_output_ratio(session: dict[str, Any]) -> float | None:
+    return session.get("cached_input_to_output_ratio", session.get("cached_output_ratio"))
 
 
 def parse_session(jsonl_path: Path) -> dict[str, Any] | None:
@@ -464,6 +473,10 @@ def parse_session(jsonl_path: Path) -> dict[str, Any] | None:
 
     instruction_chars = base_instruction_chars + max_user_instruction_chars
 
+    cached_input_to_output_ratio = compute_cached_input_to_output_ratio(
+        {"usage": usage_total, "prompts": prompts}
+    )
+
     return {
         "file": str(jsonl_path),
         "project": derive_project_name(meta),
@@ -481,7 +494,8 @@ def parse_session(jsonl_path: Path) -> dict[str, Any] | None:
         "usage": usage_total,
         "total_tokens": usage_total["total_tokens"],
         "input_output_ratio": compute_input_output_ratio({"usage": usage_total, "prompts": prompts}),
-        "cached_output_ratio": compute_cached_output_ratio({"usage": usage_total, "prompts": prompts}),
+        "cached_input_to_output_ratio": cached_input_to_output_ratio,
+        "cached_output_ratio": cached_input_to_output_ratio,
         "prompt_count": len(prompts),
         "turn_count": turn_count,
         "base_instruction_chars": base_instruction_chars,
@@ -816,7 +830,7 @@ def write_report(
         lines.append(
             f"| {index} | {format_table_cell(project_name, limit=80)} | `{short_session_id(session['session_id'])}` "
             f"| {format_ratio(session.get('input_output_ratio'))} "
-            f"| {format_ratio(session.get('cached_output_ratio'))} "
+            f"| {format_ratio(get_cached_input_to_output_ratio(session))} "
             f"| {format_tokens(session['total_tokens'])} "
             f"| {format_table_cell(get_first_prompt_text(session, limit=90))} |"
         )
@@ -1034,6 +1048,7 @@ def build_json_report(
                 "prompt_count": session.get("prompt_count", 0),
                 "turn_count": session.get("turn_count", 0),
                 "input_output_ratio": session.get("input_output_ratio"),
+                "cached_input_to_output_ratio": get_cached_input_to_output_ratio(session),
                 "cached_output_ratio": session.get("cached_output_ratio"),
                 "first_prompt": get_first_prompt_text(session, limit=240),
             }
@@ -1060,6 +1075,7 @@ def build_json_report(
                 "project": project_name,
                 "session_id": session["session_id"],
                 "input_output_ratio": session.get("input_output_ratio"),
+                "cached_input_to_output_ratio": get_cached_input_to_output_ratio(session),
                 "cached_output_ratio": session.get("cached_output_ratio"),
                 "total_tokens": session["total_tokens"],
                 "first_prompt": get_first_prompt_text(session, limit=200),

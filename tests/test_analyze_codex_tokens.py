@@ -74,9 +74,16 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["total_tokens"], 1100)
             self.assertEqual(session["usage"]["input_tokens"], 1000)
             self.assertEqual(session["input_output_ratio"], 10.0)
-            self.assertEqual(session["cached_output_ratio"], 2.5)
+            cached_ratio = session.get(
+                "cached_input_to_output_ratio",
+                session.get("cached_output_ratio"),
+            )
+            self.assertEqual(cached_ratio, 2.5)
             self.assertEqual(session["prompt_count"], 1)
             self.assertEqual(session["turn_count"], 1)
+            self.assertIn("prompts", session)
+            self.assertTrue(session["prompts"])
+            self.assertEqual(session["prompts"][0]["text"], "hello analyzer")
 
     def test_summarize_projects_aggregates_totals(self):
         projects = {
@@ -115,7 +122,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertEqual(summary["subagent_count"], 1)
         self.assertEqual(summary["subagent_tokens"], 230)
 
-    def test_prompt_display_helpers_and_redaction(self):
+    def test_normalize_prompt_for_display(self):
         normalized = self.mod.normalize_prompt_for_display(
             "# Context from my IDE setup:\n"
             "\n"
@@ -133,12 +140,16 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertIn("Files:", normalized)
         self.assertNotIn("[Doc](", normalized)
         self.assertIn("Doc", normalized)
+
+    def test_short_session_id(self):
         self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
 
+    def test_redact_prompt_text(self):
         redacted = self.mod.redact_prompt_text("secret prompt content")
         self.assertTrue(redacted.startswith("[redacted prompt:"))
         self.assertIn(str(len("secret prompt content")), redacted)
 
+    def test_get_first_prompt_text_with_redaction(self):
         with patch.object(self.mod, "REDACT_PROMPTS", True):
             excerpt = self.mod.get_first_prompt_text(
                 {"prompts": [{"text": "secret prompt content"}]},
