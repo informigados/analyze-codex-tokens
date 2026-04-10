@@ -220,8 +220,9 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertEqual(self.mod.short_session_id("1234567890", size=5), "12345...")
         self.assertEqual(self.mod.short_session_id("12345", size=5), "12345")
         self.assertEqual(self.mod.short_session_id("1234", size=5), "1234")
-        self.assertEqual(self.mod.short_session_id("1234567890", size=0), "...")
-        self.assertEqual(self.mod.short_session_id("1234567890", size=-1), "123456789...")
+        self.assertEqual(self.mod.short_session_id("1234567890", size=0), "")
+        with self.assertRaises(ValueError):
+            self.mod.short_session_id("1234567890", size=-1)
 
     def test_redact_prompt_text(self):
         redacted = self.mod.redact_prompt_text("secret prompt content")
