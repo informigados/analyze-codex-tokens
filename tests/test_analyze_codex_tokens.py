@@ -259,6 +259,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         self.assertEqual(self.mod.short_session_id("1234567890"), "12345678...")
         self.assertEqual(self.mod.short_session_id("12345678"), "12345678")
         self.assertEqual(self.mod.short_session_id("1234"), "1234")
+        self.assertEqual(self.mod.short_session_id("1234567890", size=10), "1234567890")
         self.assertEqual(self.mod.short_session_id(""), "?")
         self.assertEqual(self.mod.short_session_id(None), "?")
         self.assertEqual(self.mod.short_session_id("1234567890", size=5), "12345...")
@@ -289,39 +290,39 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             )
             self.assertEqual(excerpt, "secret prompt content")
 
-    def test_compute_cached_input_to_output_ratio_edge_cases(self):
-        ratio_normal_values = self.mod.compute_cached_input_to_output_ratio(
+    def test_compute_cached_input_to_output_ratio_with_normal_values(self):
+        ratio = self.mod.compute_cached_input_to_output_ratio(
             {"usage": {"cached_input_tokens": 250, "output_tokens": 100}}
         )
-        self.assertEqual(ratio_normal_values, 2.5)
+        self.assertEqual(ratio, 2.5)
 
-        ratio_zero_output = self.mod.compute_cached_input_to_output_ratio(
+    def test_compute_cached_input_to_output_ratio_with_zero_output_tokens(self):
+        ratio = self.mod.compute_cached_input_to_output_ratio(
             {"usage": {"cached_input_tokens": 250, "output_tokens": 0}}
         )
-        self.assertIsNone(ratio_zero_output)
+        self.assertIsNone(ratio)
 
-        ratio_zero_cached = self.mod.compute_cached_input_to_output_ratio(
+    def test_compute_cached_input_to_output_ratio_with_zero_cached_input_tokens(self):
+        ratio = self.mod.compute_cached_input_to_output_ratio(
             {"usage": {"cached_input_tokens": 0, "output_tokens": 100}}
         )
-        self.assertEqual(ratio_zero_cached, 0.0)
+        self.assertEqual(ratio, 0.0)
 
-        ratio_missing_usage = self.mod.compute_cached_input_to_output_ratio({})
-        self.assertIsNone(ratio_missing_usage)
+    def test_compute_cached_input_to_output_ratio_with_missing_usage(self):
+        ratio = self.mod.compute_cached_input_to_output_ratio({})
+        self.assertIsNone(ratio)
 
-        ratio_missing_cached_input = self.mod.compute_cached_input_to_output_ratio(
+    def test_compute_cached_input_to_output_ratio_with_missing_cached_input_tokens(self):
+        ratio = self.mod.compute_cached_input_to_output_ratio(
             {"usage": {"output_tokens": 100}}
         )
-        self.assertEqual(ratio_missing_cached_input, 0.0)
+        self.assertEqual(ratio, 0.0)
 
-        ratio_missing_output_tokens = self.mod.compute_cached_input_to_output_ratio(
+    def test_compute_cached_input_to_output_ratio_with_missing_output_tokens(self):
+        ratio = self.mod.compute_cached_input_to_output_ratio(
             {"usage": {"cached_input_tokens": 250}}
         )
-        self.assertIsNone(ratio_missing_output_tokens)
-
-    def test_compute_cached_input_to_output_ratio_with_session_usage_dict(self):
-        session = {"usage": {"cached_input_tokens": 250, "output_tokens": 100}}
-        cached_ratio = self.mod.compute_cached_input_to_output_ratio(session)
-        self.assertEqual(cached_ratio, 2.5)
+        self.assertIsNone(ratio)
 
     def test_get_cached_input_to_output_ratio_falls_back_to_cached_output_ratio(self):
         session = {"cached_output_ratio": 2.5}
