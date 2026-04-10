@@ -74,6 +74,8 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["total_tokens"], 1100)
             self.assertEqual(session["usage"]["input_tokens"], 1000)
             self.assertEqual(session["input_output_ratio"], 10.0)
+            self.assertEqual(session["cached_input_to_output_ratio"], 2.5)
+            self.assertEqual(session["cached_output_ratio"], 2.5)
             self.assertEqual(
                 self.mod.get_cached_input_to_output_ratio(session),
                 2.5,
@@ -163,7 +165,7 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
         normalized = self.mod.normalize_prompt_for_display(text)
         self.assertIn("Doc", normalized)
         self.assertNotIn("[Doc](", normalized)
-        self.assertNotIn("https://example.com and", normalized)
+        self.assertNotIn("https://example.com", normalized)
         self.assertIn("broken", normalized)
         self.assertNotIn("[broken](", normalized)
 
@@ -212,6 +214,11 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
     def test_compute_cached_input_to_output_ratio_with_session_usage_dict(self):
         session = {"usage": {"cached_input_tokens": 250, "output_tokens": 100}}
         cached_ratio = self.mod.compute_cached_input_to_output_ratio(session)
+        self.assertEqual(cached_ratio, 2.5)
+
+    def test_get_cached_input_to_output_ratio_falls_back_to_cached_output_ratio(self):
+        session = {"cached_output_ratio": 2.5}
+        cached_ratio = self.mod.get_cached_input_to_output_ratio(session)
         self.assertEqual(cached_ratio, 2.5)
 
     def test_parse_session_uses_last_token_count_event(self):
@@ -267,6 +274,8 @@ class AnalyzeCodexTokensTests(unittest.TestCase):
             self.assertEqual(session["usage"]["output_tokens"], 50)
             self.assertEqual(session["usage"]["reasoning_output_tokens"], 12)
             self.assertEqual(session["usage"]["total_tokens"], 550)
+            self.assertEqual(session["cached_input_to_output_ratio"], 2.4)
+            self.assertEqual(session["cached_output_ratio"], 2.4)
 
 
 if __name__ == "__main__":
